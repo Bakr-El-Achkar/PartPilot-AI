@@ -1,0 +1,73 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+  <rect width="1000" height="700" fill="#ffffff"/>
+
+  <path
+    d="M190 380
+       C315 170 655 165 805 365"
+    fill="none"
+    stroke="#252a2f"
+    stroke-width="35"
+    stroke-linecap="round"
+  />
+
+  <g transform="translate(110 340)">
+    <rect
+      x="0"
+      y="0"
+      width="110"
+      height="55"
+      rx="14"
+      fill="#747b81"
+    />
+
+    <rect
+      x="-45"
+      y="12"
+      width="60"
+      height="31"
+      rx="8"
+      fill="#a7adb2"
+    />
+  </g>
+
+  <g transform="translate(785 335)">
+    <rect
+      x="0"
+      y="0"
+      width="105"
+      height="60"
+      rx="14"
+      fill="#747b81"
+    />
+
+    <rect
+      x="90"
+      y="14"
+      width="65"
+      height="31"
+      rx="8"
+      fill="#a7adb2"
+    />
+  </g>
+
+  <rect
+    x="465"
+    y="220"
+    width="70"
+    height="52"
+    rx="9"
+    fill="#838a90"
+  />
+
+  <text
+    x="500"
+    y="620"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+    font-size="28"
+    font-weight="700"
+    fill="#667085"
+  >
+    BRAKE HOSE
+  </text>
+</svg>

@@ -1,0 +1,5596 @@
+﻿
+
+============================================================
+FILE: .\app\shop\page.tsx
+============================================================
+
+"use client";
+
+import PublicNavbarAuthActions from "@/components/customer/PublicNavbarAuthActions";
+
+import Link from "next/link";
+import {
+  Suspense,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+import {
+  CarFront,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  Loader2,
+  PackageSearch,
+  Plus,
+  Search,
+  ShoppingCart,
+  SlidersHorizontal,
+  Star,
+  UserRound,
+} from "lucide-react";
+
+import {
+  ApiError,
+} from "@/lib/api";
+import {
+  getAccessToken,
+} from "@/lib/auth";
+import {
+  getVehicles,
+  type Vehicle,
+} from "@/lib/vehicles";
+import {
+  getBrands,
+  getCategories,
+  getCompatibleProducts,
+  getProducts,
+  type Brand,
+  type Category,
+  type Product,
+  type ProductQuery,
+  type ProductSort,
+} from "@/lib/products";
+import {
+  addToCart,
+  CART_UPDATED_EVENT,
+  getCartCount,
+} from "@/lib/cart";
+
+
+/* ============================================================
+   CONSTANTS
+============================================================ */
+
+const PRODUCTS_PER_PAGE = 8;
+
+
+/* ============================================================
+   PRODUCT IMAGE RULES
+
+   Priority:
+   1. product.images[0]
+   2. exact component rule below
+   3. Image unavailable
+
+   There is intentionally NO generic family-level image reuse.
+============================================================ */
+
+type PartImageRule = {
+  keywords: string[];
+  image: string;
+};
+
+
+const PART_IMAGE_RULES: PartImageRule[] = [
+  /* ==========================================================
+     STEERING / SUSPENSION
+     Local stable assets for the problem cards we identified.
+  ========================================================== */
+
+  {
+    keywords: [
+      "power steering pressure hose",
+      "power steering hose",
+      "steering pressure hose",
+      "steering hose",
+    ],
+    image:
+      "/product-parts/power-steering-pressure-hose.jpg",
+  },
+
+  {
+    keywords: [
+      "power steering pump",
+      "steering pump",
+    ],
+    image:
+      "/product-parts/power-steering-pump.jpg",
+  },
+
+  {
+    keywords: [
+      "outer tie rod end",
+      "outer tie rod",
+    ],
+    image:
+      "/product-parts/outer-tie-rod.jpg",
+  },
+
+  {
+    keywords: [
+      "inner tie rod end",
+      "inner tie rod",
+    ],
+    image:
+      "/product-parts/inner-tie-rod.svg",
+  },
+
+  {
+    keywords: [
+      "tie rod end",
+      "tie rod",
+    ],
+    image:
+      "/product-parts/outer-tie-rod.jpg",
+  },
+
+  {
+    keywords: [
+      "control arm",
+      "lower control arm",
+      "upper control arm",
+    ],
+    image:
+      "/product-parts/control-arm.jpg",
+  },
+
+  {
+    keywords: [
+      "strut assembly",
+      "gas strut assembly",
+      "quick strut",
+      "strut",
+    ],
+    image:
+      "/product-parts/strut-assembly.jpg",
+  },
+
+  {
+    keywords: [
+      "shock absorber",
+    ],
+    image:
+      "/product-parts/shock-absorber.jpg",
+  },
+
+  {
+    keywords: [
+      "wheel hub bearing",
+      "wheel bearing assembly",
+      "hub bearing",
+      "wheel bearing",
+      "hub assembly",
+      "wheel hub assembly",
+    ],
+    image:
+      "/product-parts/wheel-hub-bearing.jpg",
+  },
+
+  /* ==========================================================
+     BODY / DOOR
+  ========================================================== */
+
+  {
+    keywords: [
+      "door lock actuator",
+      "lock actuator",
+      "door actuator",
+    ],
+    image:
+      "https://i.ebayimg.com/images/g/yXAAAOSwh1NkZSlE/s-l1600.jpg",
+  },
+
+  /* ==========================================================
+     WHEEL HARDWARE
+  ========================================================== */
+
+  {
+    keywords: [
+      "wheel stud",
+      "lug stud",
+    ],
+    image:
+      "https://cdn11.bigcommerce.com/s-k9b7cqysdc/images/stencil/1280w/products/4630/20037/ALL44114__08701.1654003926.jpg?c=2",
+  },
+
+  /* ==========================================================
+     BRAKES
+     Brand-neutral local component references.
+  ========================================================== */
+
+  {
+    keywords: [
+      "brake fluid",
+    ],
+    image:
+      "/product-parts/brake-fluid.svg",
+  },
+
+  {
+    keywords: [
+      "wheel speed sensor",
+      "abs sensor",
+      "anti-lock brake sensor",
+    ],
+    image:
+      "/product-parts/abs-wheel-speed-sensor.svg",
+  },
+
+  {
+    keywords: [
+      "brake pad set",
+      "brake pads",
+      "brake pad",
+      "pad set",
+    ],
+    image:
+      "/product-parts/brake-pad.svg",
+  },
+
+  {
+    keywords: [
+      "brake rotor",
+      "brake disc",
+      "disc rotor",
+      "front rotor",
+      "rear rotor",
+    ],
+    image:
+      "/product-parts/brake-rotor.svg",
+  },
+
+  {
+    keywords: [
+      "brake caliper",
+      "front caliper",
+      "rear caliper",
+    ],
+    image:
+      "/product-parts/brake-caliper.svg",
+  },
+
+  {
+    keywords: [
+      "brake hose",
+      "hydraulic brake hose",
+    ],
+    image:
+      "/product-parts/brake-hose.svg",
+  },
+
+  {
+    keywords: [
+      "brake master cylinder",
+      "master cylinder",
+    ],
+    image:
+      "/product-parts/brake-master-cylinder.svg",
+  },
+
+  /* ==========================================================
+     SENSORS
+  ========================================================== */
+
+  {
+    keywords: [
+      "knock sensor",
+      "detonation sensor",
+    ],
+    image:
+      "https://http2.mlstatic.com/D_NQ_NP_937756-MLV70442296463_072023-O.webp",
+  },
+
+  {
+    keywords: [
+      "mass air flow sensor",
+      "maf sensor",
+      "air flow meter",
+    ],
+    image:
+      "https://cdn-vs1.newpartsricambi.com/img/p/3/4/5/6/4/34564-thickbox_default.jpg",
+  },
+
+  {
+    keywords: [
+      "camshaft position sensor",
+      "cam position sensor",
+    ],
+    image:
+      "https://i.ebayimg.com/images/g/sJsAAOSwNPxkWQ5N/s-l1200.jpg",
+  },
+
+  {
+    keywords: [
+      "crankshaft position sensor",
+      "crank position sensor",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1866/CFHH/SU9542/SU9542-01.jpg",
+  },
+
+  {
+    keywords: [
+      "oxygen sensor",
+      "o2 sensor",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1866/CFHH/234-4668/234-4668-01.jpg",
+  },
+
+  /* ==========================================================
+     IGNITION / ELECTRICAL
+  ========================================================== */
+
+  {
+    keywords: [
+      "ignition coil",
+      "coil pack",
+    ],
+    image:
+      "https://cdn.awsli.com.br/2500x2500/2695/2695989/produto/2628885593588945112.jpg",
+  },
+
+  {
+    keywords: [
+      "spark plug",
+      "spark plugs",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1711/CFHH/4469/4469-01.jpg",
+  },
+
+  {
+    keywords: [
+      "alternator",
+    ],
+    image:
+      "https://media.pkwteile.de/360_photos/15804065/h-preview.jpg",
+  },
+
+  {
+    keywords: [
+      "starter motor",
+      "starter",
+    ],
+    image:
+      "https://i5.walmartimages.com/seo/Starter-1-Compatible-with-2007-2012-Toyota-Yaris-1-5L-4-Cylinder-2008-2009-2010-2011_8a03c910-cf60-4e90-b8a6-367c33347cd6.b3d8839248408f10f8a021346c2f383e.jpeg",
+  },
+
+  {
+    keywords: [
+      "automotive battery",
+      "car battery",
+      "battery",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2142/CFHH/H5-DLG/H5-DLG-01.jpg",
+  },
+
+  /* ==========================================================
+     BALL JOINT
+  ========================================================== */
+
+  {
+    keywords: [
+      "ball joint",
+    ],
+    image:
+      "https://cdn.pkwteile.de/thumb?ccf=94077986&id=13054050&lng=en&m=0&n=1",
+  },
+
+  /* ==========================================================
+     FUEL
+  ========================================================== */
+
+  {
+    keywords: [
+      "fuel pump",
+      "electric fuel pump",
+    ],
+    image:
+      "https://shop4allparts.com/cdn/shop/files/dfp-0105-pic1_20_1.jpg?v=1770323560&width=416",
+  },
+
+  {
+    keywords: [
+      "fuel injector",
+      "injector",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1866/CFHH/FJ1002/FJ1002-01.jpg",
+  },
+
+  {
+    keywords: [
+      "fuel filter",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1674/CFHH/FF3504DL/FF3504DL-01.jpg",
+  },
+
+  /* ==========================================================
+     FILTERS
+  ========================================================== */
+
+  {
+    keywords: [
+      "oil filter",
+      "engine oil filter",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1674/CFHH/STP-S16/STP-S16-01.jpg",
+  },
+
+  {
+    keywords: [
+      "cabin air filter",
+      "cabin filter",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1728/CFHH/CAF1816P/CAF1816P-01.jpg",
+  },
+
+  {
+    keywords: [
+      "engine air filter",
+      "air filter",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1728/CFHH/SA9997/SA9997-01.jpg",
+  },
+
+  /* ==========================================================
+     COOLING
+  ========================================================== */
+
+  {
+    keywords: [
+      "upper radiator hose",
+      "lower radiator hose",
+      "radiator hose",
+      "coolant hose",
+    ],
+    image:
+      "https://contentinfo.autozone.com/znetcs/product-info/en/US/dyc/D71825/image/10/",
+  },
+
+  {
+    keywords: [
+      "water pump",
+      "engine water pump",
+      "premium water pump",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2208/CFHH/US8160/US8160-04.jpg",
+  },
+
+  {
+    keywords: [
+      "engine thermostat",
+      "thermostat",
+    ],
+    image:
+      "https://www.alxmic.com/wp-content/uploads/2025/01/thermostat-auto.jpg",
+  },
+
+  {
+    keywords: [
+      "engine radiator",
+      "radiator",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2172/CFHH/B730/B730-01.jpg?imwidth=1920",
+  },
+
+  /* ==========================================================
+     TRANSMISSION / DRIVETRAIN
+  ========================================================== */
+
+  {
+    keywords: [
+      "transmission filter",
+      "automatic transmission filter",
+      "transmission oil filter",
+    ],
+    image:
+      "https://contentinfo.autozone.com/znetcs/additional-prod-images/en/US/enr/FIL-D20001/5/image/10/",
+  },
+
+  {
+    keywords: [
+      "cv axle",
+      "cv shaft",
+      "constant velocity axle",
+      "drive axle",
+      "axle assembly",
+    ],
+    image:
+      "https://media.cdn.a-premium.com/2022/item/image/d32e0560de484239aee137b097732f6f_width_1600_height_600.jpg",
+  },
+
+  {
+    keywords: [
+      "universal joint",
+      "u-joint",
+      "u joint",
+    ],
+    image:
+      "https://fa.zjwgujoint.com/zjwgujoint/2024/05/30/1-2.png",
+  },
+
+  {
+    keywords: [
+      "transmission mount",
+      "gearbox mount",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/7948/CFHH/9890/9890-01.jpg",
+  },
+
+  /* ==========================================================
+     BELTS / TIMING
+  ========================================================== */
+
+  {
+    keywords: [
+      "timing belt",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1769/CFHH/TCKWP329/TCKWP329-01.jpg",
+  },
+
+  {
+    keywords: [
+      "timing chain kit",
+      "timing chain",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1769/CFHH/KT4036/KT4036-01.jpg",
+  },
+
+  {
+    keywords: [
+      "belt tensioner",
+      "tensioner pulley",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1769/CFHH/305392/305392-01.jpg",
+  },
+
+  {
+    keywords: [
+      "serpentine belt",
+      "drive belt",
+      "accessory belt",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1769/CFHH/4060885/4060885-01.jpg",
+  },
+
+  /* ==========================================================
+     ENGINE MOUNT
+  ========================================================== */
+
+  {
+    keywords: [
+      "engine mount",
+      "motor mount",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/7948/CFHH/9954/9954-01.jpg",
+  },
+
+  /* ==========================================================
+     HVAC
+  ========================================================== */
+
+  {
+    keywords: [
+      "a/c compressor",
+      "ac compressor",
+      "air conditioning compressor",
+    ],
+    image:
+      "https://cdn.autoersatzteile.de/thumb?id=8098153&lng=fr&m=0&n=3&rev=94078007",
+  },
+
+  /* ==========================================================
+     EXHAUST
+  ========================================================== */
+
+  {
+    keywords: [
+      "catalytic converter",
+      "catalyst",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2168/CFHH/16337/16337-01.jpg",
+  },
+
+  {
+    keywords: [
+      "exhaust muffler",
+      "muffler",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2168/CFHH/18954/18954-01.jpg",
+  },
+
+  /* ==========================================================
+     LIGHTING
+  ========================================================== */
+
+  {
+    keywords: [
+      "headlight assembly",
+      "headlight",
+      "headlamp",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1890/CFHH/1592377/1592377-01.jpg",
+  },
+
+  {
+    keywords: [
+      "tail light",
+      "taillight",
+      "tail lamp",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1890/CFHH/1611389/1611389-01.jpg",
+  },
+
+  {
+    keywords: [
+      "fog light",
+      "fog lamp",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1890/CFHH/1571275/1571275-01.jpg",
+  },
+
+  /* ==========================================================
+     WIPERS
+  ========================================================== */
+
+  {
+    keywords: [
+      "wiper blade",
+      "windshield wiper",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1736/CFHH/24A/24A-01.jpg",
+  },
+];
+
+
+/* ============================================================
+   TYPES
+============================================================ */
+
+type PriceRange =
+  | "any"
+  | "under50"
+  | "50to100"
+  | "100to200"
+  | "200plus";
+
+
+/* ============================================================
+   PAGE
+============================================================ */
+
+export default function ShopPage() {
+  return (
+    <Suspense
+      fallback={
+        <ShopPageFallback />
+      }
+    >
+      <ShopContent />
+    </Suspense>
+  );
+}
+
+
+/* ============================================================
+   SHOP CONTENT
+============================================================ */
+
+function ShopContent() {
+  const router =
+    useRouter();
+
+  const searchParams =
+    useSearchParams();
+
+
+  /* ==========================================================
+     URL STATE
+  ========================================================== */
+
+  const searchValue =
+    searchParams.get(
+      "search",
+    ) ?? "";
+
+  const categoryId =
+    searchParams.get(
+      "category_id",
+    ) ?? "";
+
+  const brandId =
+    searchParams.get(
+      "brand_id",
+    ) ?? "";
+
+  const priceRange =
+    normalizePriceRange(
+      searchParams.get(
+        "price",
+      ),
+    );
+
+  const inStock =
+    searchParams.get(
+      "in_stock",
+    ) === "true";
+
+  const fitsParam = searchParams.get("fits");
+
+  const sort =
+    normalizeSort(
+      searchParams.get(
+        "sort",
+      ),
+    );
+
+  const requestedVehicleId =
+    searchParams.get(
+      "vehicleId",
+    );
+
+  const requestedPage =
+    normalizePage(
+      searchParams.get(
+        "page",
+      ),
+    );
+
+
+  /* ==========================================================
+     LOCAL STATE
+  ========================================================== */
+
+  const [
+    searchInput,
+    setSearchInput,
+  ] = useState(
+    searchValue,
+  );
+
+  const [
+    products,
+    setProducts,
+  ] = useState<
+    Product[]
+  >([]);
+
+  const [
+    categories,
+    setCategories,
+  ] = useState<
+    Category[]
+  >([]);
+
+  const [
+    brands,
+    setBrands,
+  ] = useState<
+    Brand[]
+  >([]);
+
+  const [
+    vehicles,
+    setVehicles,
+  ] = useState<
+    Vehicle[]
+  >([]);
+
+  const [
+    compatibleProducts,
+    setCompatibleProducts,
+  ] = useState<
+    Product[]
+  >([]);
+
+  const [
+    productsLoading,
+    setProductsLoading,
+  ] = useState(
+    true,
+  );
+
+  const [
+    catalogLoading,
+    setCatalogLoading,
+  ] = useState(
+    true,
+  );
+
+  const [
+    garageLoading,
+    setGarageLoading,
+  ] = useState(
+    true,
+  );
+
+  const [
+    compatibilityLoading,
+    setCompatibilityLoading,
+  ] = useState(
+    false,
+  );
+
+  const [
+    productError,
+    setProductError,
+  ] = useState("");
+
+  const [
+    catalogError,
+    setCatalogError,
+  ] = useState("");
+
+  const [
+    garageError,
+    setGarageError,
+  ] = useState("");
+
+  const [
+    compatibilityError,
+    setCompatibilityError,
+  ] = useState("");
+
+  const [
+    refreshKey,
+    setRefreshKey,
+  ] = useState(
+    0,
+  );
+
+  const [
+    cartCount,
+    setCartCount,
+  ] = useState(
+    0,
+  );
+
+  const [
+    addedProductId,
+    setAddedProductId,
+  ] = useState<
+    string | null
+  >(null);
+
+
+  /* ==========================================================
+     QUERY HELPER
+  ========================================================== */
+
+  const replaceQuery =
+    useCallback(
+      (
+        updates: Record<
+          string,
+          string | null
+        >,
+      ) => {
+        const params =
+          new URLSearchParams(
+            searchParams.toString(),
+          );
+
+        Object.entries(
+          updates,
+        ).forEach(
+          ([
+            key,
+            value,
+          ]) => {
+            if (
+              value === null ||
+              value === ""
+            ) {
+              params.delete(
+                key,
+              );
+            } else {
+              params.set(
+                key,
+                value,
+              );
+            }
+          },
+        );
+
+        const query =
+          params.toString();
+
+        router.replace(
+          query
+            ? `/shop?${query}`
+            : "/shop",
+          {
+            scroll: false,
+          },
+        );
+      },
+      [
+        router,
+        searchParams,
+      ],
+    );
+
+
+  /* ==========================================================
+     SEARCH DEBOUNCE
+  ========================================================== */
+
+  useEffect(() => {
+    const timer =
+      window.setTimeout(
+        () => {
+          const value =
+            searchInput.trim();
+
+          if (
+            value ===
+            searchValue
+          ) {
+            return;
+          }
+
+          replaceQuery({
+            search:
+              value ||
+              null,
+            page: null,
+          });
+        },
+        350,
+      );
+
+    return () => {
+      window.clearTimeout(
+        timer,
+      );
+    };
+  }, [
+    replaceQuery,
+    searchInput,
+    searchValue,
+  ]);
+
+
+  /* ==========================================================
+     CART COUNT
+  ========================================================== */
+
+  useEffect(() => {
+    function syncCartCount() {
+      setCartCount(
+        getCartCount(),
+      );
+    }
+
+    syncCartCount();
+
+    window.addEventListener(
+      CART_UPDATED_EVENT,
+      syncCartCount,
+    );
+
+    window.addEventListener(
+      "storage",
+      syncCartCount,
+    );
+
+    return () => {
+      window.removeEventListener(
+        CART_UPDATED_EVENT,
+        syncCartCount,
+      );
+
+      window.removeEventListener(
+        "storage",
+        syncCartCount,
+      );
+    };
+  }, []);
+
+
+  /* ==========================================================
+     LOAD CATEGORIES + BRANDS
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function load() {
+      try {
+        setCatalogLoading(
+          true,
+        );
+
+        setCatalogError(
+          "",
+        );
+
+        const [
+          categoryResult,
+          brandResult,
+        ] =
+          await Promise.all([
+            getCategories(),
+            getBrands(),
+          ]);
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setCategories(
+          categoryResult,
+        );
+
+        setBrands(
+          brandResult,
+        );
+      } catch (error) {
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setCatalogError(
+          error instanceof
+            ApiError
+            ? error.message
+            : "Unable to load catalog filters.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setCatalogLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    refreshKey,
+  ]);
+
+
+  /* ==========================================================
+     PRODUCT QUERY
+  ========================================================== */
+
+  const productQuery =
+    useMemo<
+      ProductQuery
+    >(() => {
+      const query:
+        ProductQuery = {
+        sort,
+      };
+
+      if (
+        searchValue
+      ) {
+        query.search =
+          searchValue;
+      }
+
+      if (
+        categoryId
+      ) {
+        query.category_id =
+          categoryId;
+      }
+
+      if (
+        brandId
+      ) {
+        query.brand_id =
+          brandId;
+      }
+
+      const prices =
+        getPriceRangeValues(
+          priceRange,
+        );
+
+      if (
+        prices.min !==
+        undefined
+      ) {
+        query.min_price =
+          prices.min;
+      }
+
+      if (
+        prices.max !==
+        undefined
+      ) {
+        query.max_price =
+          prices.max;
+      }
+
+      if (
+        inStock
+      ) {
+        query.in_stock =
+          true;
+      }
+
+      return query;
+    }, [
+      sort,
+      searchValue,
+      categoryId,
+      brandId,
+      priceRange,
+      inStock,
+    ]);
+
+
+  /* ==========================================================
+     LOAD PRODUCTS
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function load() {
+      try {
+        setProductsLoading(
+          true,
+        );
+
+        setProductError(
+          "",
+        );
+
+        const result =
+          await getProducts(
+            productQuery,
+          );
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setProducts(
+          result,
+        );
+      } catch (error) {
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setProductError(
+          error instanceof
+            ApiError
+            ? error.message
+            : "Unable to load products.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setProductsLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    productQuery,
+    refreshKey,
+  ]);
+
+
+  /* ==========================================================
+     LOAD GARAGE
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function load() {
+      const token =
+        getAccessToken();
+
+      if (
+        !token
+      ) {
+        if (
+          !cancelled
+        ) {
+          setVehicles(
+            [],
+          );
+
+          setGarageError(
+            "",
+          );
+
+          setGarageLoading(
+            false,
+          );
+        }
+
+        return;
+      }
+
+      const accessToken =
+        token;
+
+      try {
+        setGarageLoading(
+          true,
+        );
+
+        setGarageError(
+          "",
+        );
+
+        const result =
+          await getVehicles(
+            accessToken,
+          );
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setVehicles(
+          result,
+        );
+      } catch (error) {
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setVehicles(
+          [],
+        );
+
+        setGarageError(
+          error instanceof
+            ApiError
+            ? error.message
+            : "Unable to load your Garage.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setGarageLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    refreshKey,
+  ]);
+
+
+  /* ==========================================================
+     SELECT VEHICLE
+  ========================================================== */
+
+  const selectedVehicle =
+    useMemo(() => {
+      if (
+        requestedVehicleId
+      ) {
+        const requested =
+          vehicles.find(
+            (vehicle) =>
+              vehicle.id ===
+              requestedVehicleId,
+          );
+
+        if (
+          requested
+        ) {
+          return requested;
+        }
+      }
+
+      return (
+        vehicles.find(
+          (vehicle) =>
+            vehicle.is_active,
+        ) ?? null
+      );
+    }, [
+      requestedVehicleId,
+      vehicles,
+    ]);
+
+
+  /* ==========================================================
+     LOAD COMPATIBILITY
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function load() {
+      const token =
+        getAccessToken();
+
+      const vehicle =
+        selectedVehicle;
+
+      if (
+        !token ||
+        !vehicle
+      ) {
+        if (
+          !cancelled
+        ) {
+          setCompatibleProducts(
+            [],
+          );
+
+          setCompatibilityError(
+            "",
+          );
+
+          setCompatibilityLoading(
+            false,
+          );
+        }
+
+        return;
+      }
+
+      const accessToken =
+        token;
+
+      const vehicleId =
+        vehicle.id;
+
+      try {
+        setCompatibilityLoading(
+          true,
+        );
+
+        setCompatibilityError(
+          "",
+        );
+
+        const result =
+          await getCompatibleProducts(
+            accessToken,
+            vehicleId,
+          );
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setCompatibleProducts(
+          result,
+        );
+      } catch (error) {
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setCompatibleProducts(
+          [],
+        );
+
+        setCompatibilityError(
+          error instanceof
+            ApiError
+            ? error.message
+            : "Unable to load vehicle compatibility.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setCompatibilityLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    selectedVehicle,
+    refreshKey,
+  ]);
+
+
+  /* ==========================================================
+     COMPATIBLE IDS
+  ========================================================== */
+
+  const compatibleIds =
+    useMemo(
+      () =>
+        new Set(
+          compatibleProducts.map(
+            (product) =>
+              product.id,
+          ),
+        ),
+      [
+        compatibleProducts,
+      ],
+    );
+
+
+  const fitsOnly =
+    Boolean(
+      selectedVehicle,
+    ) &&
+    fitsParam !== "false" &&
+    !compatibilityError;
+
+
+  const visibleProducts =
+    useMemo(() => {
+      if (
+        !fitsOnly
+      ) {
+        return products;
+      }
+
+      return products.filter(
+        (product) =>
+          compatibleIds.has(
+            product.id,
+          ),
+      );
+    }, [
+      products,
+      fitsOnly,
+      compatibleIds,
+    ]);
+
+
+  /* ==========================================================
+     PAGINATION
+  ========================================================== */
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        visibleProducts.length /
+          PRODUCTS_PER_PAGE,
+      ),
+    );
+
+  const currentPage =
+    Math.min(
+      requestedPage,
+      totalPages,
+    );
+
+  const pageStart =
+    (
+      currentPage -
+      1
+    ) *
+    PRODUCTS_PER_PAGE;
+
+  const pageEnd =
+    Math.min(
+      pageStart +
+        PRODUCTS_PER_PAGE,
+      visibleProducts.length,
+    );
+
+  const paginatedProducts =
+    visibleProducts.slice(
+      pageStart,
+      pageEnd,
+    );
+
+
+  /* ==========================================================
+     BRAND LOOKUP
+  ========================================================== */
+
+  const brandNames =
+    useMemo(
+      () =>
+        new Map(
+          brands.map(
+            (brand) => [
+              brand.id,
+              brand.name,
+            ],
+          ),
+        ),
+      [
+        brands,
+      ],
+    );
+
+
+  /* ==========================================================
+     CART ACTION
+  ========================================================== */
+
+  function handleAddToCart(
+    product: Product,
+  ) {
+    if (
+      product.stock_quantity <=
+      0
+    ) {
+      return;
+    }
+
+
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.push(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    addToCart(
+      product,
+    );
+
+    setCartCount(
+      getCartCount(),
+    );
+
+    setAddedProductId(
+      product.id,
+    );
+
+    window.setTimeout(
+      () => {
+        setAddedProductId(
+          (current) =>
+            current ===
+            product.id
+              ? null
+              : current,
+        );
+      },
+      900,
+    );
+  }
+
+
+  /* ==========================================================
+     CLEAR FILTERS
+  ========================================================== */
+
+  function clearFilters() {
+    setSearchInput(
+      "",
+    );
+
+    const params =
+      new URLSearchParams(
+        searchParams.toString(),
+      );
+
+    [
+      "search",
+      "category_id",
+      "brand_id",
+      "price",
+      "in_stock",
+      "fits",
+      "sort",
+      "page",
+    ].forEach(
+      (key) => {
+        params.delete(
+          key,
+        );
+      },
+    );
+
+    const query =
+      params.toString();
+
+    router.replace(
+      query
+        ? `/shop?${query}`
+        : "/shop",
+      {
+        scroll: false,
+      },
+    );
+  }
+
+
+  /* ==========================================================
+     PAGE CHANGE
+  ========================================================== */
+
+  function changePage(
+    nextPage: number,
+  ) {
+    const safe =
+      Math.min(
+        Math.max(
+          nextPage,
+          1,
+        ),
+        totalPages,
+      );
+
+    replaceQuery({
+      page:
+        safe === 1
+          ? null
+          : String(
+              safe,
+            ),
+    });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+
+  /* ==========================================================
+     FILTER PANEL
+  ========================================================== */
+
+  const filterPanel = (
+    <FilterPanel
+      categories={
+        categories
+      }
+      brands={
+        brands
+      }
+      catalogLoading={
+        catalogLoading
+      }
+      categoryId={
+        categoryId
+      }
+      brandId={
+        brandId
+      }
+      priceRange={
+        priceRange
+      }
+      inStock={
+        inStock
+      }
+      fitsOnly={
+        fitsOnly
+      }
+      selectedVehicle={
+        selectedVehicle
+      }
+      compatibilityLoading={
+        compatibilityLoading
+      }
+      compatibilityError={
+        compatibilityError
+      }
+      onCategoryChange={(
+        value,
+      ) => {
+        replaceQuery({
+          category_id:
+            value ||
+            null,
+          page: null,
+        });
+      }}
+      onBrandChange={(
+        value,
+      ) => {
+        replaceQuery({
+          brand_id:
+            value ||
+            null,
+          page: null,
+        });
+      }}
+      onPriceChange={(
+        value,
+      ) => {
+        replaceQuery({
+          price:
+            value ===
+            "any"
+              ? null
+              : value,
+          page: null,
+        });
+      }}
+      onStockChange={(
+        checked,
+      ) => {
+        replaceQuery({
+          in_stock:
+            checked
+              ? "true"
+              : null,
+          page: null,
+        });
+      }}
+      onFitsChange={(
+        checked,
+      ) => {
+        replaceQuery({
+          fits: checked ? "true" : "false",
+          page: null,
+        });
+      }}
+      onClear={
+        clearFilters
+      }
+    />
+  );
+
+
+  /* ==========================================================
+     RENDER
+  ========================================================== */
+
+  return (
+    <main className="min-h-screen bg-[#f5f7f9] text-[#101828]">
+      <VehnexaNavbar
+        cartCount={
+          cartCount
+        }
+      />
+
+      <section className="mx-auto max-w-[1320px] px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-[31px] font-bold tracking-[-0.035em] text-[#101828]">
+              Parts Marketplace
+            </h1>
+
+            <p className="mt-2 text-[13px] text-[#667085]">
+              Browse 500+ catalog items and filter by the vehicle saved in My Garage.
+            </p>
+          </div>
+
+          <div className="relative w-full lg:w-[340px]">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
+
+            <input
+              id="shop-search"
+              type="search"
+              value={
+                searchInput
+              }
+              onChange={(
+                event,
+              ) => {
+                setSearchInput(
+                  event.target.value,
+                );
+              }}
+              placeholder="Search parts"
+              className="h-11 w-full rounded-[5px] border border-[#d0d5dd] bg-white pl-10 pr-3 text-[12px] text-[#344054] outline-none transition placeholder:text-[#98a2b3] focus:border-[#6b9fe8] focus:ring-2 focus:ring-[#dbeafe]"
+            />
+          </div>
+        </div>
+
+
+        <div className="mt-5">
+          {garageLoading ? (
+            <div className="h-[82px] animate-pulse rounded-[6px] border border-[#dce8f8] bg-[#f3f7fc]" />
+          ) : selectedVehicle ? (
+            <VehicleBanner
+              vehicle={
+                selectedVehicle
+              }
+              filteringCompatible={
+                fitsOnly
+              }
+            />
+          ) : (
+            <NoVehicleBanner />
+          )}
+        </div>
+
+
+        {garageError && (
+          <div className="mt-3 rounded-[5px] border border-[#f0dfb7] bg-[#fffaf0] px-4 py-3 text-[11px] text-[#8a6116]">
+            Your Shop is still available, but Vehnexa could not load your Garage:{" "}
+            {garageError}
+          </div>
+        )}
+
+
+        {compatibilityError && (
+          <div className="mt-3 flex flex-col gap-2 rounded-[5px] border border-[#f0dfb7] bg-[#fffaf0] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[11px] text-[#8a6116]">
+              Compatibility filtering is temporarily unavailable. Ordinary products are still shown.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setRefreshKey(
+                  (value) =>
+                    value + 1,
+                );
+              }}
+              className="text-[11px] font-semibold text-[#b54708]"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+
+        <details className="mt-5 rounded-[6px] border border-[#dfe3e8] bg-white lg:hidden">
+          <summary className="flex h-12 cursor-pointer list-none items-center justify-between px-4 text-[12px] font-semibold text-[#344054] [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              Filters
+            </span>
+
+            <ChevronDown className="h-4 w-4 text-[#98a2b3]" />
+          </summary>
+
+          <div className="border-t border-[#eaecf0] p-4">
+            {filterPanel}
+          </div>
+        </details>
+
+
+        <div className="mt-5 grid gap-5 lg:grid-cols-[225px_minmax(0,1fr)]">
+          <aside className="hidden lg:block">
+            <div className="rounded-[6px] border border-[#dfe3e8] bg-white p-4">
+              {filterPanel}
+            </div>
+          </aside>
+
+
+          <section className="min-w-0">
+            <div className="flex flex-col gap-3 rounded-[6px] border border-[#dfe3e8] bg-white px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-[16px] font-bold text-[#101828]">
+                  {fitsOnly ? "Compatible products" : "All products"}
+                </h2>
+
+                <p className="mt-1 text-[10px] text-[#667085]">
+                  {productsLoading
+                    ? "Loading catalog..."
+                    : visibleProducts.length === 0
+                      ? "0 products shown"
+                      : `Showing ${pageStart + 1}â€“${pageEnd} of ${visibleProducts.length} products`}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="hidden text-[10px] font-medium text-[#667085] sm:inline">
+                  Sort:
+                </span>
+
+                <div className="relative">
+                  <select
+                    value={
+                      sort
+                    }
+                    onChange={(
+                      event,
+                    ) => {
+                      const next =
+                        normalizeSort(
+                          event.target.value,
+                        );
+
+                      replaceQuery({
+                        sort:
+                          next ===
+                          "recommended"
+                            ? null
+                            : next,
+                        page: null,
+                      });
+                    }}
+                    className="h-9 appearance-none rounded-[4px] border border-[#d0d5dd] bg-white pl-3 pr-8 text-[11px] font-medium text-[#344054] outline-none"
+                  >
+                    <option value="recommended">
+                      Recommended
+                    </option>
+
+                    <option value="price_asc">
+                      Price: Low to High
+                    </option>
+
+                    <option value="price_desc">
+                      Price: High to Low
+                    </option>
+
+                    <option value="rating">
+                      Top Rated
+                    </option>
+
+                    <option value="newest">
+                      Newest
+                    </option>
+                  </select>
+
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#98a2b3]" />
+                </div>
+              </div>
+            </div>
+
+
+            {catalogError && (
+              <div className="mt-4 flex items-center justify-between rounded-[6px] border border-[#f5c2c7] bg-[#fff5f6] px-4 py-3">
+                <p className="text-[11px] text-[#b42318]">
+                  {catalogError}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRefreshKey(
+                      (value) =>
+                        value + 1,
+                    );
+                  }}
+                  className="text-[11px] font-semibold text-[#e31b2d]"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+
+            {productError && (
+              <ProductErrorState
+                message={
+                  productError
+                }
+                onRetry={() => {
+                  setRefreshKey(
+                    (value) =>
+                      value + 1,
+                  );
+                }}
+              />
+            )}
+
+
+            {!productError &&
+              (
+                productsLoading ||
+                (
+                  fitsOnly &&
+                  compatibilityLoading
+                )
+              ) && (
+                <ProductGridLoading />
+              )}
+
+
+            {!productError &&
+              !productsLoading &&
+              !compatibilityLoading &&
+              visibleProducts.length ===
+                0 && (
+                <EmptyProducts
+                  compatibility={
+                    fitsOnly
+                  }
+                  onClear={
+                    clearFilters
+                  }
+                />
+              )}
+
+
+            {!productError &&
+              !productsLoading &&
+              !(
+                fitsOnly &&
+                compatibilityLoading
+              ) &&
+              paginatedProducts.length >
+                0 && (
+                <>
+                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {paginatedProducts.map(
+                      (product) => (
+                        <ProductCard
+                          key={
+                            product.id
+                          }
+                          product={
+                            product
+                          }
+                          brandName={
+                            brandNames.get(
+                              product.brand_id,
+                            ) ??
+                            "VEHNEXA"
+                          }
+                          compatible={
+                            compatibleIds.has(
+                              product.id,
+                            )
+                          }
+                          added={
+                            addedProductId ===
+                            product.id
+                          }
+                          onAdd={
+                            handleAddToCart
+                          }
+                        />
+                      ),
+                    )}
+                  </div>
+
+                  <Pagination
+                    currentPage={
+                      currentPage
+                    }
+                    totalPages={
+                      totalPages
+                    }
+                    totalItems={
+                      visibleProducts.length
+                    }
+                    pageStart={
+                      pageStart
+                    }
+                    pageEnd={
+                      pageEnd
+                    }
+                    onChange={
+                      changePage
+                    }
+                  />
+                </>
+              )}
+
+
+            {selectedVehicle && (
+              <p className="mt-5 text-[10px] leading-5 text-[#98a2b3]">
+                Vehicle compatibility shown in this development catalog is based on Vehnexa demo fitment data and is not OEM-certified. Always verify fitment before installation.
+              </p>
+            )}
+          </section>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+
+/* ============================================================
+   FILTER PANEL
+============================================================ */
+
+function FilterPanel({
+  categories,
+  brands,
+  catalogLoading,
+  categoryId,
+  brandId,
+  priceRange,
+  inStock,
+  fitsOnly,
+  selectedVehicle,
+  compatibilityLoading,
+  compatibilityError,
+  onCategoryChange,
+  onBrandChange,
+  onPriceChange,
+  onStockChange,
+  onFitsChange,
+  onClear,
+}: {
+  categories: Category[];
+  brands: Brand[];
+  catalogLoading: boolean;
+  categoryId: string;
+  brandId: string;
+  priceRange: PriceRange;
+  inStock: boolean;
+  fitsOnly: boolean;
+  selectedVehicle:
+    | Vehicle
+    | null;
+  compatibilityLoading: boolean;
+  compatibilityError: string;
+  onCategoryChange: (
+    value: string,
+  ) => void;
+  onBrandChange: (
+    value: string,
+  ) => void;
+  onPriceChange: (
+    value: PriceRange,
+  ) => void;
+  onStockChange: (
+    value: boolean,
+  ) => void;
+  onFitsChange: (
+    value: boolean,
+  ) => void;
+  onClear: () => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-[13px] font-bold text-[#101828]">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-[#667085]" />
+          Filters
+        </h2>
+
+        <button
+          type="button"
+          onClick={
+            onClear
+          }
+          className="text-[10px] font-semibold text-[#e31b2d]"
+        >
+          Clear
+        </button>
+      </div>
+
+
+      <FilterGroup
+        label="Category"
+      >
+        <SelectField
+          value={
+            categoryId
+          }
+          disabled={
+            catalogLoading
+          }
+          onChange={
+            onCategoryChange
+          }
+        >
+          <option value="">
+            All categories
+          </option>
+
+          {categories
+            .filter(
+              (category) =>
+                category.is_active,
+            )
+            .map(
+              (category) => (
+                <option
+                  key={
+                    category.id
+                  }
+                  value={
+                    category.id
+                  }
+                >
+                  {category.name}
+                </option>
+              ),
+            )}
+        </SelectField>
+      </FilterGroup>
+
+
+      <FilterGroup
+        label="Brand"
+      >
+        <SelectField
+          value={
+            brandId
+          }
+          disabled={
+            catalogLoading
+          }
+          onChange={
+            onBrandChange
+          }
+        >
+          <option value="">
+            All brands
+          </option>
+
+          {brands
+            .filter(
+              (brand) =>
+                brand.is_active,
+            )
+            .map(
+              (brand) => (
+                <option
+                  key={
+                    brand.id
+                  }
+                  value={
+                    brand.id
+                  }
+                >
+                  {brand.name}
+                </option>
+              ),
+            )}
+        </SelectField>
+      </FilterGroup>
+
+
+      <FilterGroup
+        label="Price"
+      >
+        <SelectField
+          value={
+            priceRange
+          }
+          onChange={(
+            value,
+          ) => {
+            onPriceChange(
+              normalizePriceRange(
+                value,
+              ),
+            );
+          }}
+        >
+          <option value="any">
+            Any price
+          </option>
+
+          <option value="under50">
+            Under $50
+          </option>
+
+          <option value="50to100">
+            $50 â€“ $100
+          </option>
+
+          <option value="100to200">
+            $100 â€“ $200
+          </option>
+
+          <option value="200plus">
+            $200+
+          </option>
+        </SelectField>
+      </FilterGroup>
+
+
+      <FilterGroup
+        label="Availability"
+      >
+        <label className="flex cursor-pointer items-center gap-2.5 text-[11px] text-[#475467]">
+          <input
+            type="checkbox"
+            checked={
+              inStock
+            }
+            onChange={(
+              event,
+            ) => {
+              onStockChange(
+                event.target.checked,
+              );
+            }}
+            className="h-3.5 w-3.5 accent-[#e31b2d]"
+          />
+
+          In stock
+        </label>
+      </FilterGroup>
+
+
+      <FilterGroup
+        label="Compatibility"
+      >
+        <label className="flex items-center gap-2.5 text-[11px] text-[#475467]">
+          <input
+            type="checkbox"
+            checked={
+              fitsOnly
+            }
+            disabled={
+              !selectedVehicle ||
+              Boolean(
+                compatibilityError,
+              ) ||
+              compatibilityLoading
+            }
+            onChange={(
+              event,
+            ) => {
+              onFitsChange(
+                event.target.checked,
+              );
+            }}
+            className="h-3.5 w-3.5 accent-[#e31b2d]"
+          />
+
+          Fits my vehicle
+
+          {compatibilityLoading && (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          )}
+        </label>
+      </FilterGroup>
+    </>
+  );
+}
+
+
+function FilterGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-4 border-t border-[#eaecf0] pt-4">
+      <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.07em] text-[#667085]">
+        {label}
+      </label>
+
+      {children}
+    </div>
+  );
+}
+
+
+function SelectField({
+  value,
+  disabled = false,
+  onChange,
+  children,
+}: {
+  value: string;
+  disabled?: boolean;
+  onChange: (
+    value: string,
+  ) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={
+          value
+        }
+        disabled={
+          disabled
+        }
+        onChange={(
+          event,
+        ) => {
+          onChange(
+            event.target.value,
+          );
+        }}
+        className="h-10 w-full appearance-none rounded-[4px] border border-[#d0d5dd] bg-white pl-3 pr-8 text-[11px] text-[#344054] outline-none"
+      >
+        {children}
+      </select>
+
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#98a2b3]" />
+    </div>
+  );
+}
+
+
+/* ============================================================
+   VEHICLE BANNERS
+============================================================ */
+
+function VehicleBanner({
+  vehicle,
+  filteringCompatible,
+}: {
+  vehicle: Vehicle;
+  filteringCompatible: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-[6px] border border-[#cfe0f5] bg-[#f3f7fc] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-[5px] border border-[#d5e3f3] bg-white">
+          <CarFront className="h-5 w-5 text-[#346aa5]" />
+        </div>
+
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#4b79a9]">
+            {vehicle.is_active
+              ? "ACTIVE VEHICLE"
+              : "GARAGE VEHICLE"}
+          </p>
+
+          <div className="flex items-center gap-3">
+            <h2 className="text-[14px] font-bold text-[#183b5d]">
+              {vehicle.year}{" "}
+              {vehicle.make}{" "}
+              {vehicle.model}
+            </h2>
+
+            <span className="text-[10px] text-[#64809d]">
+              {vehicle.engine}
+            </span>
+          </div>
+
+          <p className="mt-1 text-[10px] text-[#64809d]">
+            {filteringCompatible
+              ? "Showing products marked compatible with this vehicle"
+              : "Compatibility filter is currently off"}
+          </p>
+        </div>
+      </div>
+
+      <Link
+        href="/account/garage"
+        className="flex h-9 items-center justify-center rounded-[4px] border border-[#a9c5e3] bg-white px-4 text-[10px] font-semibold text-[#346aa5]"
+      >
+        Change vehicle
+      </Link>
+    </div>
+  );
+}
+
+
+function NoVehicleBanner() {
+  return (
+    <div className="rounded-[6px] border border-[#e1e5e9] bg-white px-4 py-4">
+      <p className="text-[12px] font-semibold text-[#344054]">
+        Add or select a vehicle in My Garage to enable compatibility filtering.
+      </p>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   PRODUCT CARD
+============================================================ */
+
+function ProductCard({
+  product,
+  brandName,
+  compatible,
+  added,
+  onAdd,
+}: {
+  product: Product;
+  brandName: string;
+  compatible: boolean;
+  added: boolean;
+  onAdd: (
+    product: Product,
+  ) => void;
+}) {
+  const price =
+    product.sale_price ??
+    product.price;
+
+  const sale =
+    product.sale_price !=
+      null &&
+    product.sale_price <
+      product.price;
+
+  const outOfStock =
+    product.stock_quantity <=
+    0;
+
+  const realProductImage =
+    product.images[0]?.trim() ||
+    null;
+
+  const image =
+    getProductImage(
+      product,
+    );
+
+  const reference =
+    !realProductImage &&
+    Boolean(
+      image,
+    );
+
+  const detailHref =
+    `/product/${product.slug}`;
+
+
+  return (
+    <article className="group overflow-hidden rounded-[6px] border border-[#dfe3e8] bg-white transition hover:border-[#c7ced7] hover:shadow-[0_6px_20px_rgba(16,24,40,0.08)]">
+      <Link
+        href={
+          detailHref
+        }
+        className="relative flex h-[175px] items-center justify-center overflow-hidden bg-[#f7f8fa]"
+        aria-label={`View ${product.name}`}
+      >
+        {compatible && (
+          <span className="absolute left-2.5 top-2.5 z-20 rounded-full border border-[#b7e4c8] bg-[#ecfdf3] px-2.5 py-1 text-[9px] font-bold text-[#16804a]">
+            Fits
+          </span>
+        )}
+
+        {outOfStock && (
+          <span className="absolute right-2.5 top-2.5 z-20 rounded-full bg-white px-2.5 py-1 text-[9px] font-semibold text-[#667085]">
+            Out of stock
+          </span>
+        )}
+
+        {image ? (
+          <ProductImage
+            src={
+              image
+            }
+            alt={
+              product.name
+            }
+            reference={
+              reference
+            }
+          />
+        ) : (
+          <ImageUnavailable />
+        )}
+      </Link>
+
+
+      <div className="p-4">
+        <p className="truncate text-[10px] font-bold uppercase tracking-[0.08em] text-[#8d98a8]">
+          {brandName}
+        </p>
+
+        <Link
+          href={
+            detailHref
+          }
+          className="block"
+        >
+          <h3 className="mt-1.5 line-clamp-2 min-h-[38px] text-[12px] font-semibold leading-[19px] text-[#1d2939] transition hover:text-[#e31b2d]">
+            {product.name}
+          </h3>
+        </Link>
+
+        <div className="mt-2.5 flex items-center gap-1.5">
+          <Star className="h-3.5 w-3.5 fill-[#f4b740] text-[#f4b740]" />
+
+          <span className="text-[10px] font-semibold text-[#475467]">
+            {product.rating_average.toFixed(
+              1,
+            )}
+          </span>
+
+          <span className="text-[10px] text-[#98a2b3]">
+            ({product.review_count})
+          </span>
+        </div>
+
+        <div className="mt-3.5 flex items-end justify-between gap-3">
+          <div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[16px] font-bold text-[#101828]">
+                $
+                {price.toFixed(
+                  2,
+                )}
+              </span>
+
+              {sale && (
+                <span className="text-[10px] text-[#98a2b3] line-through">
+                  $
+                  {product.price.toFixed(
+                    2,
+                  )}
+                </span>
+              )}
+            </div>
+
+            <p className="mt-1 text-[10px] text-[#667085]">
+              {outOfStock
+                ? "Currently unavailable"
+                : `${product.stock_quantity} in stock`}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={
+              outOfStock
+            }
+            onClick={() => {
+              onAdd(
+                product,
+              );
+            }}
+            className={`flex h-9 w-9 items-center justify-center rounded-[4px] text-white transition ${
+              outOfStock
+                ? "cursor-not-allowed bg-[#cfd4dc]"
+                : added
+                  ? "bg-[#16804a]"
+                  : "bg-[#e31b2d] hover:bg-[#c81424]"
+            }`}
+            aria-label={`Add ${product.name} to cart`}
+          >
+            {added ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+
+/* ============================================================
+   PRODUCT IMAGE
+============================================================ */
+
+function ProductImage({
+  src,
+  alt,
+  reference,
+}: {
+  src: string;
+  alt: string;
+  reference: boolean;
+}) {
+  const [
+    failed,
+    setFailed,
+  ] = useState(
+    false,
+  );
+
+  if (
+    failed
+  ) {
+    return (
+      <ImageUnavailable />
+    );
+  }
+
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={
+          src
+        }
+        alt={
+          alt
+        }
+        loading="lazy"
+        onError={() => {
+          setFailed(
+            true,
+          );
+        }}
+        className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
+      />
+
+      {reference && (
+        <span className="absolute bottom-2 left-2 rounded-[3px] border border-[#e4e7ec] bg-white/95 px-2 py-1 text-[8px] font-medium text-[#667085]">
+          Reference image
+        </span>
+      )}
+    </>
+  );
+}
+
+
+function ImageUnavailable() {
+  return (
+    <div className="flex flex-col items-center justify-center">
+      <PackageSearch className="h-8 w-8 text-[#c3cad3]" />
+
+      <span className="mt-2 text-[10px] text-[#98a2b3]">
+        Image unavailable
+      </span>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   PAGINATION
+============================================================ */
+
+function Pagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  pageStart,
+  pageEnd,
+  onChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  pageStart: number;
+  pageEnd: number;
+  onChange: (
+    page: number,
+  ) => void;
+}) {
+  if (
+    totalPages <=
+    1
+  ) {
+    return null;
+  }
+
+  const pages =
+    getPaginationPages(
+      currentPage,
+      totalPages,
+    );
+
+  return (
+    <div className="mt-5 flex flex-col gap-3 rounded-[6px] border border-[#dfe3e8] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-[10px] text-[#667085]">
+        Showing {pageStart + 1}â€“{pageEnd} of {totalItems}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          disabled={
+            currentPage ===
+            1
+          }
+          onClick={() => {
+            onChange(
+              currentPage -
+                1,
+            );
+          }}
+          className="flex h-8 items-center gap-1 rounded-[4px] border border-[#d0d5dd] px-2.5 text-[10px] disabled:opacity-40"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+          Previous
+        </button>
+
+        {pages.map(
+          (
+            page,
+            index,
+          ) =>
+            page ===
+            "ellipsis" ? (
+              <span
+                key={`ellipsis-${index}`}
+                className="px-2 text-[11px] text-[#98a2b3]"
+              >
+                â€¦
+              </span>
+            ) : (
+              <button
+                type="button"
+                key={
+                  page
+                }
+                onClick={() => {
+                  onChange(
+                    page,
+                  );
+                }}
+                className={`h-8 min-w-8 rounded-[4px] border px-2 text-[10px] font-semibold ${
+                  page ===
+                  currentPage
+                    ? "border-[#e31b2d] bg-[#e31b2d] text-white"
+                    : "border-[#d0d5dd] bg-white text-[#475467]"
+                }`}
+              >
+                {page}
+              </button>
+            ),
+        )}
+
+        <button
+          type="button"
+          disabled={
+            currentPage ===
+            totalPages
+          }
+          onClick={() => {
+            onChange(
+              currentPage +
+                1,
+            );
+          }}
+          className="flex h-8 items-center gap-1 rounded-[4px] border border-[#d0d5dd] px-2.5 text-[10px] disabled:opacity-40"
+        >
+          Next
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   EMPTY / ERROR / LOADING
+============================================================ */
+
+function EmptyProducts({
+  compatibility,
+  onClear,
+}: {
+  compatibility: boolean;
+  onClear: () => void;
+}) {
+  return (
+    <div className="mt-4 flex min-h-[300px] items-center justify-center rounded-[6px] border border-[#dfe3e8] bg-white">
+      <div className="text-center">
+        <PackageSearch className="mx-auto h-8 w-8 text-[#98a2b3]" />
+
+        <h3 className="mt-3 text-[15px] font-bold">
+          {compatibility
+            ? "No compatible products found"
+            : "No products found"}
+        </h3>
+
+        <button
+          type="button"
+          onClick={
+            onClear
+          }
+          className="mt-4 rounded-[4px] border border-[#d0d5dd] px-4 py-2 text-[11px]"
+        >
+          Clear filters
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+function ProductErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="mt-4 rounded-[6px] border border-[#f5c2c7] bg-white p-8 text-center">
+      <p className="text-[11px] text-[#b42318]">
+        {message}
+      </p>
+
+      <button
+        type="button"
+        onClick={
+          onRetry
+        }
+        className="mt-4 rounded bg-[#e31b2d] px-4 py-2 text-[11px] text-white"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+
+
+function ProductGridLoading() {
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {Array.from({
+        length:
+          PRODUCTS_PER_PAGE,
+      }).map(
+        (
+          _,
+          index,
+        ) => (
+          <div
+            key={
+              index
+            }
+            className="overflow-hidden rounded-[6px] border border-[#e4e7ec] bg-white"
+          >
+            <div className="h-[175px] animate-pulse bg-[#eef1f4]" />
+
+            <div className="space-y-3 p-4">
+              <div className="h-3 w-20 animate-pulse rounded bg-[#eef1f4]" />
+              <div className="h-4 w-full animate-pulse rounded bg-[#eef1f4]" />
+              <div className="h-4 w-3/4 animate-pulse rounded bg-[#eef1f4]" />
+              <div className="h-5 w-24 animate-pulse rounded bg-[#eef1f4]" />
+            </div>
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+
+/* ============================================================
+   NAVBAR
+============================================================ */
+
+function VehnexaNavbar({
+  cartCount,
+}: {
+  cartCount: number;
+}) {
+  return (
+    <header className="border-b border-[#163047] bg-[#071b2d]">
+      <div className="mx-auto flex h-[64px] max-w-[1320px] items-center px-4 sm:px-6 lg:px-8">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5"
+        >
+          <VehnexaMark />
+
+          <span className="text-[15px] font-bold text-white">
+            Vehnexa
+          </span>
+        </Link>
+
+        <nav className="ml-10 hidden h-full items-center gap-8 lg:flex">
+          <TopNavLink
+            href="/shop"
+            label="Shop"
+            active
+          />
+
+          <TopNavLink
+            href="/account/garage"
+            label="My Garage"
+          />
+
+          <TopNavLink
+            href="/ai-mechanic"
+            label="AI Mechanic"
+          />
+
+          <TopNavLink
+            href="#resources"
+            label="Resources"
+          />
+        </nav>
+
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              document
+                .getElementById(
+                  "shop-search",
+                )
+                ?.focus();
+            }}
+            className="flex h-9 w-9 items-center justify-center text-[#c4ced7]"
+            aria-label="Search products"
+          >
+            <Search className="h-[17px] w-[17px]" />
+          </button>
+
+          <div
+            className="relative flex h-9 w-9 items-center justify-center text-[#c4ced7]"
+            aria-label={`Cart with ${cartCount} items`}
+          >
+            <ShoppingCart className="h-[17px] w-[17px]" />
+
+            {cartCount >
+              0 && (
+              <span className="absolute right-0 top-0 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[8px] font-bold text-white">
+                {cartCount >
+                99
+                  ? "99+"
+                  : cartCount}
+              </span>
+            )}
+          </div>
+
+          <PublicNavbarAuthActions />
+        </div>
+      </div>
+    </header>
+  );
+}
+
+
+function TopNavLink({
+  href,
+  label,
+  active = false,
+}: {
+  href: string;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <Link
+      href={
+        href
+      }
+      className={`relative flex h-full items-center text-[11px] font-medium ${
+        active
+          ? "text-white"
+          : "text-[#b9c5d0]"
+      }`}
+    >
+      {label}
+
+      {active && (
+        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#e31b2d]" />
+      )}
+    </Link>
+  );
+}
+
+
+function VehnexaMark() {
+  return (
+    <div className="relative h-7 w-7">
+      <span className="absolute left-[1px] top-[3px] h-[22px] w-[10px] -skew-x-[25deg] rounded-[2px] bg-[#e31b2d]" />
+
+      <span className="absolute right-[2px] top-[3px] h-[22px] w-[10px] skew-x-[25deg] rounded-[2px] bg-[#d8dee5]" />
+    </div>
+  );
+}
+
+
+/* ============================================================
+   PAGE FALLBACK
+============================================================ */
+
+function ShopPageFallback() {
+  return (
+    <main className="min-h-screen bg-[#f5f7f9]">
+      <header className="h-[64px] bg-[#071b2d]" />
+
+      <div className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8">
+        <div className="h-8 w-52 animate-pulse rounded bg-[#e4e7ec]" />
+
+        <div className="mt-6 h-[82px] animate-pulse rounded-[6px] bg-[#e9edf2]" />
+
+        <ProductGridLoading />
+      </div>
+    </main>
+  );
+}
+
+
+/* ============================================================
+   PRODUCT IMAGE RESOLUTION
+============================================================ */
+
+function getProductImage(
+  product: Product,
+): string | null {
+  /*
+   * 1. Real product/SKU image from MongoDB always wins.
+   */
+
+  const realImage =
+    product.images[0]?.trim();
+
+  if (
+    realImage
+  ) {
+    return realImage;
+  }
+
+
+  /*
+   * 2. Build searchable component identity.
+   */
+
+  const searchableText =
+    [
+      product.name,
+      product.description,
+      product.sku,
+      product.part_number,
+      product.subcategory_slug,
+    ]
+      .filter(
+        Boolean,
+      )
+      .join(" ")
+      .toLowerCase();
+
+
+  /*
+   * 3. Exact component-type representative image.
+   *
+   * Rules are ordered from more specific to less specific.
+   */
+
+  const matchingRule =
+    PART_IMAGE_RULES.find(
+      (rule) =>
+        rule.keywords.some(
+          (keyword) =>
+            searchableText.includes(
+              keyword,
+            ),
+        ),
+    );
+
+
+  if (
+    matchingRule
+  ) {
+    return matchingRule.image;
+  }
+
+
+  /*
+   * 4. Unknown component.
+   *
+   * Do not invent or reuse a generic family photo.
+   */
+
+  return null;
+}
+
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function normalizePage(
+  value:
+    | string
+    | null,
+): number {
+  const parsed =
+    Number.parseInt(
+      value ?? "1",
+      10,
+    );
+
+  return Number.isFinite(
+    parsed,
+  ) &&
+    parsed >
+      0
+    ? parsed
+    : 1;
+}
+
+
+function getPaginationPages(
+  currentPage: number,
+  totalPages: number,
+): Array<
+  number |
+  "ellipsis"
+> {
+  if (
+    totalPages <=
+    7
+  ) {
+    return Array.from(
+      {
+        length:
+          totalPages,
+      },
+      (
+        _,
+        index,
+      ) =>
+        index +
+        1,
+    );
+  }
+
+  if (
+    currentPage <=
+    4
+  ) {
+    return [
+      1,
+      2,
+      3,
+      4,
+      5,
+      "ellipsis",
+      totalPages,
+    ];
+  }
+
+  if (
+    currentPage >=
+    totalPages -
+      3
+  ) {
+    return [
+      1,
+      "ellipsis",
+      totalPages - 4,
+      totalPages - 3,
+      totalPages - 2,
+      totalPages - 1,
+      totalPages,
+    ];
+  }
+
+  return [
+    1,
+    "ellipsis",
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    "ellipsis",
+    totalPages,
+  ];
+}
+
+
+function normalizeSort(
+  value:
+    | string
+    | null,
+): ProductSort {
+  switch (
+    value
+  ) {
+    case "price_asc":
+    case "price_desc":
+    case "rating":
+    case "newest":
+      return value;
+
+    default:
+      return "recommended";
+  }
+}
+
+
+function normalizePriceRange(
+  value:
+    | string
+    | null,
+): PriceRange {
+  switch (
+    value
+  ) {
+    case "under50":
+    case "50to100":
+    case "100to200":
+    case "200plus":
+      return value;
+
+    default:
+      return "any";
+  }
+}
+
+
+function getPriceRangeValues(
+  range: PriceRange,
+): {
+  min?: number;
+  max?: number;
+} {
+  switch (
+    range
+  ) {
+    case "under50":
+      return {
+        max: 50,
+      };
+
+    case "50to100":
+      return {
+        min: 50,
+        max: 100,
+      };
+
+    case "100to200":
+      return {
+        min: 100,
+        max: 200,
+      };
+
+    case "200plus":
+      return {
+        min: 200,
+      };
+
+    default:
+      return {};
+  }
+}
+
+============================================================
+FILE: .\app\globals.css
+============================================================
+
+@import "tailwindcss";
+
+:root {
+  --background: #070707;
+  --foreground: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(
+      circle at 70% 10%,
+      rgba(220, 38, 38, 0.05),
+      transparent 25%
+    ),
+    #070707;
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+::selection {
+  background: #dc2626;
+  color: white;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080808;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 100px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #dc2626;
+}
+
+
+/* PartPilot browser autofill styling */
+.partpilot-input:-webkit-autofill,
+.partpilot-input:-webkit-autofill:hover,
+.partpilot-input:-webkit-autofill:focus,
+.partpilot-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #202124 !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  caret-color: #202124;
+  transition: background-color 9999s ease-out 0s;
+}
+
+.partpilot-input:focus {
+  background-color: #ffffff;
+}
+
+============================================================
+FILE: .\package.json
+============================================================
+
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.8.0",
+    "framer-motion": "^13.2.0",
+    "lucide-react": "^1.45.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+
+============================================================
+FILE: .\lib\products.ts
+============================================================
+
+import { ApiError } from "@/lib/api";
+
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+
+/* ============================================================
+   PRODUCT TYPES
+============================================================ */
+
+export type Product = {
+  id: string;
+  name: string;
+  slug: string;
+  sku: string;
+  part_number: string;
+  brand_id: string;
+  category_id: string;
+  subcategory_slug: string;
+  description: string;
+  price: number;
+  sale_price: number | null;
+  stock_quantity: number;
+  images: string[];
+  specifications: Record<
+    string,
+    unknown
+  >;
+  warranty: string | null;
+  rating_average: number;
+  review_count: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+
+/* ============================================================
+   CATEGORY TYPES
+============================================================ */
+
+export type CategorySubcategory = {
+  name: string;
+  slug: string;
+  description?: string | null;
+};
+
+
+export type Category = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  subcategories: CategorySubcategory[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+
+/* ============================================================
+   BRAND TYPES
+============================================================ */
+
+export type Brand = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  country?: string | null;
+  website?: string | null;
+  logo_url?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+
+/* ============================================================
+   SORT
+============================================================ */
+
+export type ProductSort =
+  | "recommended"
+  | "price_asc"
+  | "price_desc"
+  | "rating"
+  | "newest";
+
+
+/* ============================================================
+   SHOP QUERY
+============================================================ */
+
+export type ProductQuery = {
+  search?: string;
+  category_id?: string;
+  brand_id?: string;
+  subcategory_slug?: string;
+  min_price?: number;
+  max_price?: number;
+  in_stock?: boolean;
+  sort?: ProductSort;
+};
+
+
+/* ============================================================
+   RESPONSE READER
+============================================================ */
+
+async function readResponse(
+  response: Response,
+) {
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType =
+    response.headers.get(
+      "content-type",
+    );
+
+  if (
+    contentType?.includes(
+      "application/json",
+    )
+  ) {
+    return response.json();
+  }
+
+  const text =
+    await response.text();
+
+  return {
+    detail:
+      text ||
+      "Unexpected server response.",
+  };
+}
+
+
+/* ============================================================
+   PUBLIC JSON REQUEST
+============================================================ */
+
+async function getPublicJson<T>(
+  url: string,
+  fallbackMessage: string,
+): Promise<T> {
+  const response = await fetch(
+    url,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    },
+  );
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        fallbackMessage,
+      response.status,
+    );
+  }
+
+  return data as T;
+}
+
+
+/* ============================================================
+   GET PRODUCTS
+============================================================ */
+
+export async function getProducts(
+  query: ProductQuery = {},
+): Promise<Product[]> {
+  const params =
+    new URLSearchParams();
+
+  if (
+    query.search &&
+    query.search.trim()
+  ) {
+    params.set(
+      "search",
+      query.search.trim(),
+    );
+  }
+
+  if (query.category_id) {
+    params.set(
+      "category_id",
+      query.category_id,
+    );
+  }
+
+  if (query.brand_id) {
+    params.set(
+      "brand_id",
+      query.brand_id,
+    );
+  }
+
+  if (query.subcategory_slug) {
+    params.set(
+      "subcategory_slug",
+      query.subcategory_slug,
+    );
+  }
+
+  if (
+    query.min_price !==
+    undefined
+  ) {
+    params.set(
+      "min_price",
+      String(
+        query.min_price,
+      ),
+    );
+  }
+
+  if (
+    query.max_price !==
+    undefined
+  ) {
+    params.set(
+      "max_price",
+      String(
+        query.max_price,
+      ),
+    );
+  }
+
+  if (
+    query.in_stock !==
+    undefined
+  ) {
+    params.set(
+      "in_stock",
+      String(
+        query.in_stock,
+      ),
+    );
+  }
+
+  if (query.sort) {
+    params.set(
+      "sort",
+      query.sort,
+    );
+  }
+
+  const queryString =
+    params.toString();
+
+  const url = queryString
+    ? `${API_BASE_URL}/api/products?${queryString}`
+    : `${API_BASE_URL}/api/products`;
+
+  return getPublicJson<Product[]>(
+    url,
+    "Unable to load products.",
+  );
+}
+
+
+/* ============================================================
+   GET CATEGORIES
+============================================================ */
+
+export async function getCategories(): Promise<
+  Category[]
+> {
+  return getPublicJson<
+    Category[]
+  >(
+    `${API_BASE_URL}/api/catalog/categories`,
+    "Unable to load categories.",
+  );
+}
+
+
+/* ============================================================
+   GET BRANDS
+============================================================ */
+
+export async function getBrands(): Promise<
+  Brand[]
+> {
+  return getPublicJson<
+    Brand[]
+  >(
+    `${API_BASE_URL}/api/catalog/brands`,
+    "Unable to load brands.",
+  );
+}
+
+
+/* ============================================================
+   GET COMPATIBLE PRODUCTS
+============================================================ */
+
+export async function getCompatibleProducts(
+  token: string,
+  vehicleId: string,
+): Promise<Product[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/fitments/compatible/${encodeURIComponent(
+      vehicleId,
+    )}`,
+    {
+      method: "GET",
+      headers: {
+        Accept:
+          "application/json",
+        Authorization:
+          `Bearer ${token}`,
+      },
+      cache: "no-store",
+    },
+  );
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to load compatible products.",
+      response.status,
+    );
+  }
+
+  return data as Product[];
+}
+
+
+/* ============================================================
+   EFFECTIVE PRODUCT PRICE
+============================================================ */
+
+export function getEffectivePrice(
+  product: Product,
+): number {
+  return (
+    product.sale_price ??
+    product.price
+  );
+}
+
+
+export async function getProductBySlug(
+  slug: string,
+): Promise<Product> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/products/slug/${encodeURIComponent(
+      slug,
+    )}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    },
+  );
+
+  const contentType =
+    response.headers.get(
+      "content-type",
+    );
+
+  let data: unknown;
+
+  if (
+    contentType?.includes(
+      "application/json",
+    )
+  ) {
+    data =
+      await response.json();
+  } else {
+    const text =
+      await response.text();
+
+    data = {
+      detail:
+        text ||
+        "Unexpected server response.",
+    };
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof data === "object" &&
+      data !== null &&
+      "detail" in data &&
+      typeof (
+        data as {
+          detail?: unknown;
+        }
+      ).detail === "string"
+        ? (
+            data as {
+              detail: string;
+            }
+          ).detail
+        : "Unable to load product.";
+
+    throw new ApiError(
+      message,
+      response.status,
+    );
+  }
+
+  return data as Product;
+}
+
+============================================================
+FILE: .\lib\vehicles.ts
+============================================================
+
+import { ApiError } from "@/lib/api";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+export type Vehicle = {
+  id: string;
+  user_id: string;
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string | null;
+  image_url?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type VehicleCreatePayload = {
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string;
+  image_url?: string;
+};
+
+
+export type VehiclePreview = {
+  found: boolean;
+  image_url: string | null;
+  thumbnail_url: string | null;
+  source_url: string | null;
+  message: string | null;
+};
+
+export type VehicleUpdatePayload = Partial<VehicleCreatePayload>;
+
+async function readResponse(response: Response) {
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType =
+    response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail:
+      text ||
+      "Unexpected response from PartPilot.",
+  };
+}
+
+function authHeaders(token: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+export async function getVehicles(
+  token: string,
+): Promise<Vehicle[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicles.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function getVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function createVehicle(
+  token: string,
+  payload: VehicleCreatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to add vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function updateVehicle(
+  token: string,
+  vehicleId: string,
+  payload: VehicleUpdatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to update vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function setActiveVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}/active`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to activate vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function deleteVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await readResponse(response);
+
+    throw new ApiError(
+      data?.detail ?? "Unable to delete vehicle.",
+      response.status,
+    );
+  }
+}
+
+
+
+export async function getVehiclePreview(
+  token: string,
+  year: number,
+  make: string,
+  model: string,
+): Promise<VehiclePreview> {
+  const params = new URLSearchParams({
+    year: String(year),
+    make,
+    model,
+  });
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/preview/image?${params.toString()}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to load vehicle preview.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+============================================================
+FILE: .\lib\cart.ts
+============================================================
+
+import type {
+  Product,
+} from "@/lib/products";
+
+
+const CART_STORAGE_KEY =
+  "vehnexa_cart";
+
+export const CART_UPDATED_EVENT =
+  "vehnexa-cart-updated";
+
+
+/* ============================================================
+   CART ITEM
+============================================================ */
+
+export type CartItem = {
+  product_id: string;
+  name: string;
+  slug: string;
+  sku: string;
+  brand_id: string;
+  category_id: string;
+  image_url: string | null;
+
+  price: number;
+  sale_price: number | null;
+
+  stock_quantity: number;
+  quantity: number;
+};
+
+
+/* ============================================================
+   BROWSER GUARD
+============================================================ */
+
+function canUseStorage(): boolean {
+  return (
+    typeof window !==
+    "undefined"
+  );
+}
+
+
+/* ============================================================
+   READ CART
+============================================================ */
+
+export function getCartItems(): CartItem[] {
+  if (!canUseStorage()) {
+    return [];
+  }
+
+  try {
+    const raw =
+      window.localStorage.getItem(
+        CART_STORAGE_KEY,
+      );
+
+    if (!raw) {
+      return [];
+    }
+
+    const parsed: unknown =
+      JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter(
+      (
+        item,
+      ): item is CartItem => {
+        if (
+          typeof item !==
+            "object" ||
+          item === null
+        ) {
+          return false;
+        }
+
+        const candidate =
+          item as Partial<CartItem>;
+
+        return (
+          typeof candidate.product_id ===
+            "string" &&
+          typeof candidate.name ===
+            "string" &&
+          typeof candidate.quantity ===
+            "number" &&
+          typeof candidate.stock_quantity ===
+            "number"
+        );
+      },
+    );
+  } catch {
+    return [];
+  }
+}
+
+
+/* ============================================================
+   WRITE CART
+============================================================ */
+
+function saveCartItems(
+  items: CartItem[],
+): void {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(
+    CART_STORAGE_KEY,
+    JSON.stringify(items),
+  );
+
+  window.dispatchEvent(
+    new Event(
+      CART_UPDATED_EVENT,
+    ),
+  );
+}
+
+
+/* ============================================================
+   PRODUCT â†’ CART ITEM
+============================================================ */
+
+function productToCartItem(
+  product: Product,
+  quantity: number,
+): CartItem {
+  return {
+    product_id: product.id,
+    name: product.name,
+    slug: product.slug,
+    sku: product.sku,
+
+    brand_id:
+      product.brand_id,
+
+    category_id:
+      product.category_id,
+
+    image_url:
+      product.images[0] ??
+      null,
+
+    price: product.price,
+
+    sale_price:
+      product.sale_price,
+
+    stock_quantity:
+      product.stock_quantity,
+
+    quantity,
+  };
+}
+
+
+/* ============================================================
+   ADD TO CART
+============================================================ */
+
+export function addToCart(
+  product: Product,
+  quantity = 1,
+): CartItem[] {
+  const items =
+    getCartItems();
+
+  if (
+    product.stock_quantity <=
+    0
+  ) {
+    return items;
+  }
+
+  const safeRequestedQuantity =
+    Math.max(
+      1,
+      Math.floor(quantity),
+    );
+
+  const existingIndex =
+    items.findIndex(
+      (item) =>
+        item.product_id ===
+        product.id,
+    );
+
+  if (existingIndex >= 0) {
+    const existing =
+      items[existingIndex];
+
+    const updatedQuantity =
+      Math.min(
+        existing.quantity +
+          safeRequestedQuantity,
+        product.stock_quantity,
+      );
+
+    items[existingIndex] = {
+      ...existing,
+
+      name: product.name,
+      slug: product.slug,
+      sku: product.sku,
+
+      brand_id:
+        product.brand_id,
+
+      category_id:
+        product.category_id,
+
+      image_url:
+        product.images[0] ??
+        null,
+
+      price:
+        product.price,
+
+      sale_price:
+        product.sale_price,
+
+      stock_quantity:
+        product.stock_quantity,
+
+      quantity:
+        updatedQuantity,
+    };
+  } else {
+    const initialQuantity =
+      Math.min(
+        safeRequestedQuantity,
+        product.stock_quantity,
+      );
+
+    items.push(
+      productToCartItem(
+        product,
+        initialQuantity,
+      ),
+    );
+  }
+
+  saveCartItems(items);
+
+  return items;
+}
+
+
+/* ============================================================
+   UPDATE QUANTITY
+============================================================ */
+
+export function updateCartQuantity(
+  productId: string,
+  quantity: number,
+): CartItem[] {
+  const items =
+    getCartItems();
+
+  const index =
+    items.findIndex(
+      (item) =>
+        item.product_id ===
+        productId,
+    );
+
+  if (index < 0) {
+    return items;
+  }
+
+  if (quantity <= 0) {
+    const filtered =
+      items.filter(
+        (item) =>
+          item.product_id !==
+          productId,
+      );
+
+    saveCartItems(filtered);
+
+    return filtered;
+  }
+
+  const item =
+    items[index];
+
+  const safeQuantity =
+    Math.min(
+      Math.max(
+        1,
+        Math.floor(quantity),
+      ),
+      item.stock_quantity,
+    );
+
+  items[index] = {
+    ...item,
+    quantity:
+      safeQuantity,
+  };
+
+  saveCartItems(items);
+
+  return items;
+}
+
+
+/* ============================================================
+   REMOVE ITEM
+============================================================ */
+
+export function removeFromCart(
+  productId: string,
+): CartItem[] {
+  const items =
+    getCartItems().filter(
+      (item) =>
+        item.product_id !==
+        productId,
+    );
+
+  saveCartItems(items);
+
+  return items;
+}
+
+
+/* ============================================================
+   CLEAR CART
+============================================================ */
+
+export function clearCart(): void {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.localStorage.removeItem(
+    CART_STORAGE_KEY,
+  );
+
+  window.dispatchEvent(
+    new Event(
+      CART_UPDATED_EVENT,
+    ),
+  );
+}
+
+
+/* ============================================================
+   CART COUNT
+
+   Counts quantities, not just distinct products.
+
+   Example:
+   Brake Pads أ— 2
+   Oil Filter أ— 1
+
+   count = 3
+============================================================ */
+
+export function getCartCount(): number {
+  return getCartItems().reduce(
+    (
+      total,
+      item,
+    ) =>
+      total +
+      item.quantity,
+    0,
+  );
+}
+
+
+/* ============================================================
+   CART SUBTOTAL
+============================================================ */
+
+export function getCartSubtotal(): number {
+  return getCartItems().reduce(
+    (
+      total,
+      item,
+    ) => {
+      const unitPrice =
+        item.sale_price ??
+        item.price;
+
+      return (
+        total +
+        unitPrice *
+          item.quantity
+      );
+    },
+    0,
+  );
+}
+
+============================================================
+FILE: .\lib\auth.ts
+============================================================
+
+const TOKEN_KEY = "partpilot_access_token";
+
+export function saveAccessToken(token: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function removeAccessToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+export function isAuthenticated(): boolean {
+  return Boolean(getAccessToken());
+}
+
+============================================================
+FILE: .\components\customer\PublicNavbarAuthActions.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  UserRound,
+} from "lucide-react";
+
+import {
+  ApiError,
+  getCurrentUser,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
+
+import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
+
+
+type SessionState =
+  | "checking"
+  | "guest"
+  | "customer"
+  | "hidden";
+
+
+export default function PublicNavbarAuthActions() {
+  const [
+    state,
+    setState,
+  ] =
+    useState<SessionState>(
+      "checking",
+    );
+
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+
+    const timer =
+      window.setTimeout(
+        () => {
+          async function load() {
+            const token =
+              getAccessToken();
+
+
+            if (!token) {
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+
+
+              return;
+            }
+
+
+            try {
+              const user =
+                await getCurrentUser(
+                  token,
+                );
+
+
+              if (
+                cancelled
+              ) {
+                return;
+              }
+
+
+              setState(
+                user.role ===
+                  "admin"
+                  ? "hidden"
+                  : "customer",
+              );
+
+            } catch (
+              error
+            ) {
+              if (
+                error instanceof
+                  ApiError &&
+                (
+                  error.status ===
+                    401 ||
+                  error.status ===
+                    403
+                )
+              ) {
+                removeAccessToken();
+              }
+
+
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+            }
+          }
+
+
+          void load();
+        },
+        0,
+      );
+
+
+    return () => {
+      cancelled =
+        true;
+
+      window.clearTimeout(
+        timer,
+      );
+    };
+  }, []);
+
+
+  if (
+    state ===
+      "checking" ||
+    state ===
+      "hidden"
+  ) {
+    return (
+      <div className="h-9 w-[120px]" />
+    );
+  }
+
+
+  if (
+    state ===
+    "guest"
+  ) {
+    return (
+      <div className="ml-2 flex items-center gap-2">
+        <Link
+          href="/login"
+          className="flex h-8 items-center justify-center rounded-[5px] px-3 text-[9px] font-semibold text-[#d0d9e2] transition hover:bg-white/[0.06] hover:text-white"
+        >
+          Login
+        </Link>
+
+        <Link
+          href="/register"
+          className="flex h-8 items-center justify-center rounded-[5px] bg-[#e31b2d] px-3.5 text-[9px] font-semibold text-white transition hover:bg-[#c91727]"
+        >
+          Create account
+        </Link>
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex items-center gap-1">
+      <NavbarNotificationBell />
+
+      <Link
+        href="/account"
+        aria-label="Account"
+        title="Account"
+        className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+      >
+        <UserRound className="h-[16px] w-[16px]" />
+      </Link>
+
+      <CustomerLogoutButton />
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\components\customer\CustomerLogoutButton.tsx
+============================================================
+
+"use client";
+
+import {
+  LogOut,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  removeAccessToken,
+} from "@/lib/auth";
+
+
+export default function CustomerLogoutButton() {
+  const router =
+    useRouter();
+
+
+  function logout() {
+    removeAccessToken();
+
+
+    router.replace(
+      "/login",
+    );
+
+
+    router.refresh();
+  }
+
+
+  return (
+    <button
+      type="button"
+      onClick={
+        logout
+      }
+      aria-label="Sign out"
+      title="Sign out"
+      className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+    >
+      <LogOut className="h-[16px] w-[16px]" />
+    </button>
+  );
+}
+
+
+============================================================
+FILE: .\components\notifications\NavbarNotificationBell.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Bell,
+  CheckCheck,
+  Megaphone,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type CustomerNotification,
+} from "@/lib/notifications";
+
+
+export default function NavbarNotificationBell() {
+  const router =
+    useRouter();
+
+
+  const containerRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    );
+
+
+  const [
+    notifications,
+    setNotifications,
+  ] =
+    useState<CustomerNotification[]>(
+      [],
+    );
+
+
+  const [
+    open,
+    setOpen,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const loadNotifications =
+    useCallback(
+      async () => {
+        const token =
+          getAccessToken();
+
+
+        if (!token) {
+          setNotifications(
+            [],
+          );
+
+          return;
+        }
+
+
+        try {
+          setLoading(
+            true,
+          );
+
+
+          const result =
+            await getNotifications(
+              token,
+            );
+
+
+          setNotifications(
+            result,
+          );
+
+          setError(
+            "",
+          );
+
+        } catch (
+          loadError
+        ) {
+          if (
+            loadError instanceof
+              ApiError &&
+            (
+              loadError.status ===
+                401 ||
+              loadError.status ===
+                403
+            )
+          ) {
+            removeAccessToken();
+
+            setNotifications(
+              [],
+            );
+
+            return;
+          }
+
+
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load notifications.",
+          );
+
+        } finally {
+          setLoading(
+            false,
+          );
+        }
+      },
+      [],
+    );
+
+
+  useEffect(() => {
+    const timeout =
+      window.setTimeout(
+        () => {
+          void loadNotifications();
+        },
+        0,
+      );
+
+
+    return () => {
+      window.clearTimeout(
+        timeout,
+      );
+    };
+  }, [
+    loadNotifications,
+  ]);
+
+
+  useEffect(() => {
+    function handleOutsideClick(
+      event:
+        MouseEvent,
+    ) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(
+          event.target as Node,
+        )
+      ) {
+        setOpen(
+          false,
+        );
+      }
+    }
+
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick,
+    );
+
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick,
+      );
+    };
+  }, []);
+
+
+  const unreadCount =
+    notifications.filter(
+      (
+        notification,
+      ) =>
+        !notification.is_read,
+    ).length;
+
+
+  async function toggleDropdown() {
+    const nextOpen =
+      !open;
+
+
+    setOpen(
+      nextOpen,
+    );
+
+
+    if (
+      nextOpen
+    ) {
+      await loadNotifications();
+    }
+  }
+
+
+  async function markAllRead() {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    try {
+      await markAllNotificationsRead(
+        token,
+      );
+
+
+      const now =
+        new Date()
+          .toISOString();
+
+
+      setNotifications(
+        (
+          current,
+        ) =>
+          current.map(
+            (
+              notification,
+            ) => ({
+              ...notification,
+
+              is_read:
+                true,
+
+              read_at:
+                notification.read_at ??
+                now,
+            }),
+          ),
+      );
+
+
+      setError(
+        "",
+      );
+
+    } catch (
+      readError
+    ) {
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notifications.",
+      );
+    }
+  }
+
+
+  async function openNotification(
+    notification:
+      CustomerNotification,
+  ) {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    let current =
+      notification;
+
+
+    try {
+      if (
+        !notification.is_read
+      ) {
+        current =
+          await markNotificationRead(
+            token,
+            notification.id,
+          );
+
+
+        setNotifications(
+          (
+            items,
+          ) =>
+            items.map(
+              (
+                item,
+              ) =>
+                item.id ===
+                current.id
+                  ? current
+                  : item,
+            ),
+        );
+      }
+
+
+      setOpen(
+        false,
+      );
+
+
+      if (
+        current.link &&
+        current.link.startsWith(
+          "/",
+        )
+      ) {
+        router.push(
+          current.link,
+        );
+      }
+
+    } catch (
+      readError
+    ) {
+      if (
+        readError instanceof
+          ApiError &&
+        readError.status ===
+          401
+      ) {
+        removeAccessToken();
+
+        return;
+      }
+
+
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notification.",
+      );
+    }
+  }
+
+
+  return (
+    <div
+      ref={
+        containerRef
+      }
+      className="relative"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          void toggleDropdown();
+        }}
+        aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#071523] text-white ring-1 ring-white/10 transition hover:bg-[#10293f]"
+      >
+        <Bell className="h-[17px] w-[17px]" />
+
+
+        {unreadCount >
+          0 && (
+          <span className="absolute right-0 top-0 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[8px] font-bold leading-none text-white">
+            {
+              unreadCount >
+              99
+                ? "99+"
+                : unreadCount
+            }
+          </span>
+        )}
+      </button>
+
+
+      {open && (
+        <div className="absolute right-0 top-[44px] z-[100] w-[360px] max-w-[calc(100vw-32px)] overflow-hidden rounded-[10px] border border-[#dfe3e8] bg-white text-[#101828] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
+          <div className="flex items-start justify-between border-b border-[#eaecf0] px-4 py-4">
+            <div>
+              <h2 className="text-[12px] font-bold">
+                Notifications
+              </h2>
+
+              <p className="mt-1 text-[8px] text-[#667085]">
+                {
+                  unreadCount
+                }{" "}
+                unread
+              </p>
+            </div>
+
+
+            <div className="flex items-center gap-1">
+              {unreadCount >
+                0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void markAllRead();
+                  }}
+                  className="flex h-8 items-center gap-1.5 rounded-[6px] px-2 text-[8px] font-semibold text-[#475467] hover:bg-[#f2f4f7]"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+
+                  Read all
+                </button>
+              )}
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  setOpen(
+                    false,
+                  )
+                }
+                aria-label="Close notifications"
+                className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#667085] hover:bg-[#f2f4f7]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+
+          {error && (
+            <div className="border-b border-[#fecdca] bg-[#fff4f5] px-4 py-3 text-[8px] text-[#b42318]">
+              {
+                error
+              }
+            </div>
+          )}
+
+
+          <div className="max-h-[380px] overflow-y-auto">
+            {loading &&
+            notifications.length ===
+              0 ? (
+              <div className="space-y-2 p-4">
+                {[
+                  1,
+                  2,
+                  3,
+                ].map(
+                  (
+                    item,
+                  ) => (
+                    <div
+                      key={
+                        item
+                      }
+                      className="h-[72px] animate-pulse rounded-[7px] bg-[#f2f4f7]"
+                    />
+                  ),
+                )}
+              </div>
+            ) : notifications.length ===
+              0 ? (
+              <div className="px-5 py-10 text-center">
+                <Bell className="mx-auto h-7 w-7 text-[#b8c0ca]" />
+
+                <p className="mt-3 text-[10px] font-semibold">
+                  No notifications
+                </p>
+
+                <p className="mt-1 text-[8px] text-[#98a2b3]">
+                  You&apos;re all caught up.
+                </p>
+              </div>
+            ) : (
+              notifications
+                .slice(
+                  0,
+                  6,
+                )
+                .map(
+                  (
+                    notification,
+                  ) => (
+                    <button
+                      key={
+                        notification.id
+                      }
+                      type="button"
+                      onClick={() => {
+                        void openNotification(
+                          notification,
+                        );
+                      }}
+                      className={
+                        notification.is_read
+                          ? "flex w-full gap-3 border-b border-[#f0f2f5] px-4 py-4 text-left last:border-0 hover:bg-[#fafbfc]"
+                          : "flex w-full gap-3 border-b border-[#f0f2f5] bg-[#fffafb] px-4 py-4 text-left last:border-0 hover:bg-[#fff5f6]"
+                      }
+                    >
+                      <NotificationCategoryIcon
+                        notification={
+                          notification
+                        }
+                      />
+
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="truncate text-[9px] font-bold">
+                            {
+                              notification.title
+                            }
+                          </p>
+
+
+                          {!notification.is_read && (
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#e31b2d]" />
+                          )}
+                        </div>
+
+
+                        <p className="mt-1 line-clamp-2 text-[8px] leading-4 text-[#667085]">
+                          {
+                            notification.message
+                          }
+                        </p>
+
+
+                        <p className="mt-2 text-[7px] text-[#98a2b3]">
+                          {
+                            formatDate(
+                              notification.created_at,
+                            )
+                          }
+                        </p>
+                      </div>
+                    </button>
+                  ),
+                )
+            )}
+          </div>
+
+
+          <div className="border-t border-[#eaecf0] bg-[#fafbfc] p-3">
+            <Link
+              href="/account/notifications"
+              onClick={() =>
+                setOpen(
+                  false,
+                )
+              }
+              className="flex h-9 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white text-[8px] font-semibold text-[#344054]"
+            >
+              View all notifications
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function NotificationCategoryIcon({
+  notification,
+}: {
+  notification:
+    CustomerNotification;
+}) {
+  if (
+    notification.category ===
+    "promotion"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#fff1f3] text-[#c01048]">
+        <Megaphone className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  if (
+    notification.category ===
+    "account"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#eff4ff] text-[#3538cd]">
+        <ShieldCheck className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#f2f4f7] text-[#475467]">
+      <Bell className="h-3.5 w-3.5" />
+    </div>
+  );
+}
+
+
+function formatDate(
+  value: string,
+) {
+  const date =
+    new Date(
+      value,
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "";
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "numeric",
+
+      hour:
+        "numeric",
+
+      minute:
+        "2-digit",
+    },
+  ).format(
+    date,
+  );
+}
+
+
+============================================================
+PRODUCT ASSETS
+============================================================
+
+public\product-parts\abs-wheel-speed-sensor.svg
+public\product-parts\brake-caliper.svg
+public\product-parts\brake-fluid.svg
+public\product-parts\brake-hose.svg
+public\product-parts\brake-master-cylinder.svg
+public\product-parts\brake-pad.svg
+public\product-parts\brake-rotor.svg
+public\product-parts\control-arm.jpg
+public\product-parts\inner-tie-rod.svg
+public\product-parts\outer-tie-rod.jpg
+public\product-parts\power-steering-pressure-hose.jpg
+public\product-parts\power-steering-pump.jpg
+public\product-parts\shock-absorber.jpg
+public\product-parts\strut-assembly.jpg
+public\product-parts\wheel-hub-bearing.jpg

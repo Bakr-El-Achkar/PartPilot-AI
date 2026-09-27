@@ -1,0 +1,3164 @@
+"use client";
+
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Canvas,
+  useFrame,
+  useThree,
+} from "@react-three/fiber";
+
+import {
+  Billboard,
+  ContactShadows,
+  Line,
+  useGLTF,
+} from "@react-three/drei";
+
+import * as THREE from "three";
+
+import {
+  KTX2Loader,
+} from "three-stdlib";
+
+import {
+  Activity,
+} from "lucide-react";
+
+import type {
+  RelevanceLevel,
+} from "@/lib/aiMechanic";
+
+
+const MODEL_URL =
+  "/models/vehnexa-car.glb";
+
+
+const COMPONENT_NODE_MAP:
+  Record<string, string> = {
+    brake_rotor:
+      "WheelFrontLBrakeDisc",
+
+    brake_pad:
+      "WheelFrontLBrakePad",
+
+    brake_caliper:
+      "WheelFrontLBrakePad",
+
+    control_arm:
+      "WheelFrontL",
+
+    tie_rod:
+      "WheelFrontL",
+
+    wheel_bearing:
+      "WheelFrontL",
+
+    spark_plug:
+      "Engine",
+
+    ignition_coil:
+      "Engine",
+
+    battery:
+      "Engine",
+
+    alternator:
+      "Engine",
+
+    radiator:
+      "Engine",
+
+    water_pump:
+      "Engine",
+  };
+
+
+const HOTSPOT_YAW:
+  Record<string, number> = {
+    front_brakes: 0,
+
+    front_suspension: 0,
+
+    steering_system:
+      0.15,
+
+    engine_bay:
+      0.28,
+
+    battery_area:
+      0.3,
+
+    engine_front:
+      0.28,
+
+    cooling_system:
+      0.28,
+
+    rear_vehicle:
+      Math.PI,
+  };
+
+
+type DiagnosticVehicleStageProps = {
+  hotspotKey:
+    string | null;
+
+  componentKey:
+    string | null;
+
+  componentLabel:
+    string | null;
+
+  relevance:
+    RelevanceLevel | null;
+
+  analyzing:
+    boolean;
+
+  diagnosticStep:
+    number;
+
+  diagnosticLabel:
+    string;
+};
+
+
+type ExplodePart = {
+  object:
+    THREE.Object3D;
+
+  original:
+    THREE.Vector3;
+
+  direction:
+    number;
+
+  amount:
+    number;
+};
+
+
+function damp(
+  current: number,
+  target: number,
+  lambda: number,
+  delta: number,
+) {
+  return THREE.MathUtils.lerp(
+    current,
+    target,
+    1 -
+      Math.exp(
+        -lambda *
+          delta,
+      ),
+  );
+}
+
+
+function dampAngle(
+  current: number,
+  target: number,
+  lambda: number,
+  delta: number,
+) {
+  const difference =
+    Math.atan2(
+      Math.sin(
+        target -
+          current,
+      ),
+      Math.cos(
+        target -
+          current,
+      ),
+    );
+
+  return (
+    current +
+    difference *
+      (
+        1 -
+        Math.exp(
+          -lambda *
+            delta,
+        )
+      )
+  );
+}
+
+
+function smoothRange(
+  value: number,
+  start: number,
+  end: number,
+) {
+  const normalized =
+    THREE.MathUtils.clamp(
+      (
+        value -
+        start
+      ) /
+        (
+          end -
+          start
+        ),
+      0,
+      1,
+    );
+
+  return (
+    normalized *
+    normalized *
+    (
+      3 -
+      2 *
+        normalized
+    )
+  );
+}
+
+
+function materialsOf(
+  object: THREE.Object3D,
+) {
+  const result:
+    THREE.MeshStandardMaterial[] =
+    [];
+
+  object.traverse(
+    (child) => {
+      if (
+        !(
+          child instanceof
+          THREE.Mesh
+        )
+      ) {
+        return;
+      }
+
+      const materials =
+        Array.isArray(
+          child.material,
+        )
+          ? child.material
+          : [
+              child.material,
+            ];
+
+      for (
+        const material
+        of materials
+      ) {
+        if (
+          material instanceof
+          THREE.MeshStandardMaterial
+        ) {
+          result.push(
+            material,
+          );
+        }
+      }
+    },
+  );
+
+  return result;
+}
+
+
+function copyMaterials(
+  root: THREE.Object3D,
+) {
+  root.traverse(
+    (child) => {
+      if (
+        !(
+          child instanceof
+          THREE.Mesh
+        )
+      ) {
+        return;
+      }
+
+      if (
+        Array.isArray(
+          child.material,
+        )
+      ) {
+        child.material =
+          child.material.map(
+            (material) =>
+              material.clone(),
+          );
+      } else {
+        child.material =
+          child.material.clone();
+      }
+    },
+  );
+}
+
+
+function prepareMaterial(
+  material:
+    THREE.MeshStandardMaterial,
+) {
+  if (
+    material.userData
+      .vehnexaPrepared
+  ) {
+    return;
+  }
+
+  material.userData
+    .vehnexaPrepared =
+    true;
+
+  material.userData
+    .originalOpacity =
+    material.opacity;
+
+  material.userData
+    .originalTransparent =
+    material.transparent;
+
+  material.userData
+    .originalDepthWrite =
+    material.depthWrite;
+
+  material.userData
+    .originalEmissive =
+    material.emissive.clone();
+
+  material.userData
+    .originalEmissiveIntensity =
+    material.emissiveIntensity;
+}
+
+
+function restoreMaterial(
+  material:
+    THREE.MeshStandardMaterial,
+) {
+  prepareMaterial(
+    material,
+  );
+
+  const originalEmissive =
+    material.userData
+      .originalEmissive as
+      THREE.Color;
+
+  material.opacity =
+    material.userData
+      .originalOpacity;
+
+  material.transparent =
+    material.userData
+      .originalTransparent;
+
+  material.depthWrite =
+    material.userData
+      .originalDepthWrite;
+
+  material.emissive.copy(
+    originalEmissive,
+  );
+
+  material.emissiveIntensity =
+    material.userData
+      .originalEmissiveIntensity;
+}
+
+
+type MutableNumberRef = {
+  current: number;
+};
+
+
+function CameraRig({
+  target,
+  focusRef,
+}: {
+  target:
+    THREE.Object3D | null;
+
+  focusRef:
+    MutableNumberRef;
+}) {
+  const {
+    camera,
+  } = useThree();
+
+
+  const lookTarget =
+    useRef(
+      new THREE.Vector3(
+        0,
+        0.05,
+        0,
+      ),
+    );
+
+
+  const targetWorld =
+    useMemo(
+      () =>
+        new THREE.Vector3(),
+      [],
+    );
+
+
+  const defaultPosition =
+    useMemo(
+      () =>
+        new THREE.Vector3(
+          6,
+          2.8,
+          7,
+        ),
+      [],
+    );
+
+
+  const focusedPosition =
+    useMemo(
+      () =>
+        new THREE.Vector3(),
+      [],
+    );
+
+
+  const desiredPosition =
+    useMemo(
+      () =>
+        new THREE.Vector3(),
+      [],
+    );
+
+
+  const desiredLook =
+    useMemo(
+      () =>
+        new THREE.Vector3(),
+      [],
+    );
+
+
+  /* eslint-disable react-hooks/immutability */
+  useFrame(
+    (
+      _state,
+      delta,
+    ) => {
+      const focus =
+        THREE.MathUtils.clamp(
+          focusRef.current,
+          0,
+          1,
+        );
+
+
+      if (
+        target
+      ) {
+        target.getWorldPosition(
+          targetWorld,
+        );
+      } else {
+        targetWorld.set(
+          0,
+          0.05,
+          0,
+        );
+      }
+
+
+      focusedPosition
+        .copy(
+          targetWorld,
+        )
+        .add(
+          new THREE.Vector3(
+            4.05,
+            2.0,
+            4.55,
+          ),
+        );
+
+
+      desiredPosition
+        .copy(
+          defaultPosition,
+        )
+        .lerp(
+          focusedPosition,
+          focus,
+        );
+
+
+      desiredLook
+        .set(
+          0,
+          0.05,
+          0,
+        )
+        .lerp(
+          targetWorld,
+          focus,
+        );
+
+
+      camera.position.lerp(
+        desiredPosition,
+        1 -
+          Math.exp(
+            -2.8 *
+              delta,
+          ),
+      );
+
+
+      lookTarget.current.lerp(
+        desiredLook,
+        1 -
+          Math.exp(
+            -3.2 *
+              delta,
+          ),
+      );
+
+
+      camera.lookAt(
+        lookTarget.current,
+      );
+    },
+  );
+  /* eslint-enable react-hooks/immutability */
+
+
+  return null;
+}
+
+
+function DiagnosticMarker({
+  target,
+  label,
+  revealRef,
+}: {
+  target:
+    THREE.Object3D;
+
+  label:
+    string;
+
+  revealRef:
+    MutableNumberRef;
+}) {
+  const group =
+    useRef<THREE.Group>(
+      null,
+    );
+
+
+  const worldPosition =
+    useMemo(
+      () =>
+        new THREE.Vector3(),
+      [],
+    );
+
+
+  /* eslint-disable react-hooks/immutability */
+  useFrame(
+    ({
+      clock,
+    }) => {
+      if (
+        !group.current
+      ) {
+        return;
+      }
+
+
+      const reveal =
+        THREE.MathUtils.clamp(
+          revealRef.current,
+          0,
+          1,
+        );
+
+
+      target.getWorldPosition(
+        worldPosition,
+      );
+
+
+      group.current.position.copy(
+        worldPosition,
+      );
+
+
+      group.current.visible =
+        reveal >
+        0.01;
+
+
+      const pulse =
+        1 +
+        Math.sin(
+          clock.elapsedTime *
+            4.2,
+        ) *
+          0.07;
+
+
+      group.current.scale.setScalar(
+        THREE.MathUtils.lerp(
+          0.35,
+          pulse,
+          reveal,
+        ),
+      );
+    },
+  );
+  /* eslint-enable react-hooks/immutability */
+
+
+  return (
+    <group
+      ref={
+        group
+      }
+      name={
+        `diagnostic-target-${label}`
+      }
+      visible={
+        false
+      }
+    >
+      <pointLight
+        color="#ff4054"
+        intensity={
+          1.45
+        }
+        distance={
+          1.35
+        }
+      />
+
+
+      <mesh>
+        <sphereGeometry
+          args={[
+            0.042,
+            24,
+            24,
+          ]}
+        />
+
+        <meshStandardMaterial
+          color="#ffffff"
+          emissive="#e31b2d"
+          emissiveIntensity={
+            3.5
+          }
+        />
+      </mesh>
+
+
+      <Billboard>
+        <mesh>
+          <torusGeometry
+            args={[
+              0.14,
+              0.008,
+              16,
+              64,
+            ]}
+          />
+
+          <meshBasicMaterial
+            color="#ff5264"
+            transparent
+            opacity={
+              0.92
+            }
+          />
+        </mesh>
+
+
+        <Line
+          points={[
+            [
+              0.12,
+              0.03,
+              0,
+            ],
+            [
+              0.40,
+              0.28,
+              0,
+            ],
+            [
+              1.02,
+              0.28,
+              0,
+            ],
+          ]}
+          color="#ff5264"
+          lineWidth={
+            1.25
+          }
+          transparent
+          opacity={
+            0.88
+          }
+        />
+
+
+        <mesh
+          position={[
+            1.035,
+            0.28,
+            0,
+          ]}
+        >
+          <circleGeometry
+            args={[
+              0.018,
+              20,
+            ]}
+          />
+
+          <meshBasicMaterial
+            color="#ff5264"
+          />
+        </mesh>
+      </Billboard>
+    </group>
+  );
+}
+
+
+function VehicleModel({
+  hotspotKey,
+  componentKey,
+  componentLabel,
+  analyzing,
+}: {
+  hotspotKey:
+    string | null;
+
+  componentKey:
+    string | null;
+
+  componentLabel:
+    string | null;
+
+  analyzing:
+    boolean;
+}) {
+  const {
+    gl,
+  } = useThree();
+
+
+  const ktx2Loader =
+    useMemo(
+      () => {
+        const loader =
+          new KTX2Loader();
+
+        loader.setTranscoderPath(
+          "/basis/",
+        );
+
+        loader.detectSupport(
+          gl,
+        );
+
+        return loader;
+      },
+      [
+        gl,
+      ],
+    );
+
+
+  const {
+    scene,
+  } = useGLTF(
+    MODEL_URL,
+    true,
+    true,
+    (loader) => {
+      loader.setKTX2Loader(
+        ktx2Loader,
+      );
+    },
+  );
+
+
+  const root =
+    useRef<THREE.Group>(
+      null,
+    );
+
+
+  /*
+   * ==========================================================
+   * DIAGNOSTIC TIMELINE
+   *
+   * Result does NOT explode immediately.
+   *
+   * 0.0 - 0.9  orient car
+   * 0.7 - 1.7  camera approach
+   * 1.6 - 2.3  x-ray body
+   * 2.3 - 3.5  wheel separates
+   * 3.6 - 4.45 secondary brake part separates
+   * 4.45- 5.20 target component isolated/glowing
+   * 5.10- 5.75 marker + connector revealed
+   * ==========================================================
+   */
+
+  const timelineRef =
+    useRef(0);
+
+
+  const lastComponentRef =
+    useRef<
+      string | null
+    >(
+      null,
+    );
+
+
+  const cameraFocusRef =
+    useRef(0);
+
+
+  const markerRevealRef =
+    useRef(0);
+
+
+  const model =
+    useMemo(
+      () => {
+        const cloned =
+          scene.clone(
+            true,
+          );
+
+        copyMaterials(
+          cloned,
+        );
+
+        return cloned;
+      },
+      [
+        scene,
+      ],
+    );
+
+
+  const {
+    scale,
+    center,
+  } =
+    useMemo(
+      () => {
+        const box =
+          new THREE.Box3()
+            .setFromObject(
+              model,
+            );
+
+
+        const size =
+          new THREE.Vector3();
+
+
+        const modelCenter =
+          new THREE.Vector3();
+
+
+        box.getSize(
+          size,
+        );
+
+
+        box.getCenter(
+          modelCenter,
+        );
+
+
+        const maximum =
+          Math.max(
+            size.x,
+            size.y,
+            size.z,
+          );
+
+
+        return {
+          scale:
+            4.9 /
+            maximum,
+
+          center:
+            modelCenter,
+        };
+      },
+      [
+        model,
+      ],
+    );
+
+
+  /*
+   * The surrogate GLB has a real Axles node but no individual
+   * tie-rod, control-arm or wheel-bearing meshes.
+   *
+   * Front-end diagnoses therefore isolate Axles as the
+   * representative mechanical region after surrounding
+   * components have been removed.
+   */
+  const isFrontEndComponent =
+    componentKey ===
+      "tie_rod" ||
+    componentKey ===
+      "control_arm" ||
+    componentKey ===
+      "wheel_bearing";
+
+
+  const targetName =
+    componentKey
+      ? (
+          isFrontEndComponent
+            ? "Axles"
+            : COMPONENT_NODE_MAP[
+                componentKey
+              ]
+        )
+      : null;
+
+
+  const targetObject =
+    useMemo(
+      () =>
+        targetName
+          ? model.getObjectByName(
+              targetName,
+            ) ??
+            null
+          : null,
+      [
+        model,
+        targetName,
+      ],
+    );
+
+
+  /*
+   * BODY MATERIALS
+   */
+
+  const bodyMaterialsRef =
+    useRef<
+      THREE.MeshStandardMaterial[]
+    >([]);
+
+
+  useEffect(() => {
+    const result:
+      THREE.MeshStandardMaterial[] =
+      [];
+
+
+    model.traverse(
+      (
+        object,
+      ) => {
+        if (
+          !(
+            object instanceof
+            THREE.Mesh
+          )
+        ) {
+          return;
+        }
+
+
+        if (
+          object.name.startsWith(
+            "Body",
+          ) ||
+          object.name.startsWith(
+            "Interior",
+          )
+        ) {
+          result.push(
+            ...materialsOf(
+              object,
+            ),
+          );
+        }
+      },
+    );
+
+
+    for (
+      const material
+      of result
+    ) {
+      prepareMaterial(
+        material,
+      );
+    }
+
+
+    bodyMaterialsRef.current =
+      result;
+
+
+    return () => {
+      for (
+        const material
+        of result
+      ) {
+        restoreMaterial(
+          material,
+        );
+      }
+
+      bodyMaterialsRef.current =
+        [];
+    };
+  }, [
+    model,
+  ]);
+
+
+  /*
+   * TARGET MATERIALS
+   */
+
+  const targetMaterialsRef =
+    useRef<
+      THREE.MeshStandardMaterial[]
+    >([]);
+
+
+  useEffect(() => {
+    if (
+      !targetObject
+    ) {
+      targetMaterialsRef.current =
+        [];
+
+      return;
+    }
+
+
+    const result =
+      materialsOf(
+        targetObject,
+      );
+
+
+    for (
+      const material
+      of result
+    ) {
+      prepareMaterial(
+        material,
+      );
+    }
+
+
+    targetMaterialsRef.current =
+      result;
+
+
+    return () => {
+      for (
+        const material
+        of result
+      ) {
+        restoreMaterial(
+          material,
+        );
+      }
+
+      targetMaterialsRef.current =
+        [];
+    };
+  }, [
+    targetObject,
+  ]);
+
+
+  /*
+   * ==========================================================
+   * FRONT-LEFT REPRESENTATIVE BRAKE ASSEMBLY
+   * ==========================================================
+   */
+
+  const wheelShellPartsRef =
+    useRef<
+      ExplodePart[]
+    >([]);
+
+
+  const discPartRef =
+    useRef<
+      ExplodePart | null
+    >(
+      null,
+    );
+
+
+  const padPartRef =
+    useRef<
+      ExplodePart | null
+    >(
+      null,
+    );
+
+
+  useEffect(() => {
+    const wheel =
+      model.getObjectByName(
+        "WheelFrontL",
+      );
+
+
+    const shellParts:
+      ExplodePart[] =
+      [];
+
+
+    if (
+      wheel
+    ) {
+      for (
+        const child
+        of wheel.children
+      ) {
+        const lower =
+          child.name
+            .toLowerCase();
+
+
+        if (
+          !lower.includes(
+            "brake",
+          )
+        ) {
+          shellParts.push({
+            object:
+              child,
+
+            original:
+              child.position
+                .clone(),
+
+            direction:
+              1,
+
+            amount:
+              0.48,
+          });
+        }
+      }
+    }
+
+
+    const disc =
+      model.getObjectByName(
+        "WheelFrontLBrakeDisc",
+      );
+
+
+    const pad =
+      model.getObjectByName(
+        "WheelFrontLBrakePad",
+      );
+
+
+    wheelShellPartsRef.current =
+      shellParts;
+
+
+    discPartRef.current =
+      disc
+        ? {
+            object:
+              disc,
+
+            original:
+              disc.position
+                .clone(),
+
+            direction:
+              1,
+
+            amount:
+              0.07,
+          }
+        : null;
+
+
+    padPartRef.current =
+      pad
+        ? {
+            object:
+              pad,
+
+            original:
+              pad.position
+                .clone(),
+
+            direction:
+              1,
+
+            amount:
+              0.22,
+          }
+        : null;
+
+
+    return () => {
+      for (
+        const part
+        of shellParts
+      ) {
+        part.object.position.copy(
+          part.original,
+        );
+      }
+
+
+      if (
+        discPartRef.current
+      ) {
+        discPartRef.current
+          .object
+          .position
+          .copy(
+            discPartRef.current
+              .original,
+          );
+      }
+
+
+      if (
+        padPartRef.current
+      ) {
+        padPartRef.current
+          .object
+          .position
+          .copy(
+            padPartRef.current
+              .original,
+          );
+      }
+
+
+      wheelShellPartsRef.current =
+        [];
+
+      discPartRef.current =
+        null;
+
+      padPartRef.current =
+        null;
+    };
+  }, [
+    model,
+  ]);
+
+
+  /*
+   * ==========================================================
+   * ENGINE-BAY REPRESENTATIVE DISASSEMBLY
+   *
+   * The surrogate GLB does not contain an individual
+   * water-pump, radiator, alternator or battery mesh.
+   *
+   * We therefore remove real surrounding hood layers
+   * one-by-one and expose the real Engine mesh before
+   * highlighting the representative inspection region.
+   * ==========================================================
+   */
+
+  const hoodPartsRef =
+    useRef<
+      ExplodePart[]
+    >([]);
+
+
+  useEffect(() => {
+    const definitions = [
+      {
+        name:
+          "BodyHoodTopgrill",
+        amount:
+          0.16,
+      },
+      {
+        name:
+          "BodyHood",
+        amount:
+          0.48,
+      },
+      {
+        name:
+          "BodyHoodInterior01",
+        amount:
+          0.27,
+      },
+      {
+        name:
+          "BodyHoodInterior02",
+        amount:
+          0.34,
+      },
+      {
+        name:
+          "BodyHoodUnder",
+        amount:
+          0.22,
+      },
+    ];
+
+
+    const parts:
+      ExplodePart[] =
+      [];
+
+
+    for (
+      const definition
+      of definitions
+    ) {
+      const object =
+        model.getObjectByName(
+          definition.name,
+        );
+
+
+      if (
+        !object
+      ) {
+        continue;
+      }
+
+
+      parts.push({
+        object,
+        original:
+          object.position
+            .clone(),
+        direction:
+          1,
+        amount:
+          definition.amount,
+      });
+    }
+
+
+    hoodPartsRef.current =
+      parts;
+
+
+    return () => {
+      for (
+        const part
+        of parts
+      ) {
+        part.object.position.copy(
+          part.original,
+        );
+      }
+
+      hoodPartsRef.current =
+        [];
+    };
+  }, [
+    model,
+  ]);
+
+
+  const isBrakeFocus =
+    componentKey ===
+      "brake_rotor" ||
+    componentKey ===
+      "brake_pad" ||
+    componentKey ===
+      "brake_caliper";
+
+
+  const isEngineBayFocus =
+    hotspotKey ===
+      "cooling_system" ||
+    hotspotKey ===
+      "engine_bay" ||
+    hotspotKey ===
+      "engine_front" ||
+    hotspotKey ===
+      "battery_area";
+
+
+  const isFrontEndFocus =
+    hotspotKey ===
+      "steering_system" ||
+    hotspotKey ===
+      "front_suspension" ||
+    hotspotKey ===
+      "front_left_suspension" ||
+    hotspotKey ===
+      "front_right_suspension";
+
+
+  const yawTarget =
+    hotspotKey
+      ? HOTSPOT_YAW[
+          hotspotKey
+        ] ??
+        0
+      : 0;
+
+
+  /*
+   * ==========================================================
+   * ONE-BY-ONE DISASSEMBLY
+   * ==========================================================
+   */
+
+  /* eslint-disable react-hooks/immutability */
+  useFrame(
+    (
+      {
+        clock,
+      },
+      delta,
+    ) => {
+      if (
+        !root.current
+      ) {
+        return;
+      }
+
+
+      /*
+       * ------------------------------------------------------
+       * ANALYZING
+       *
+       * Car stays assembled.
+       * We do NOT reveal the exploded result while Qwen works.
+       * ------------------------------------------------------
+       */
+
+      if (
+        analyzing
+      ) {
+        timelineRef.current =
+          0;
+
+        lastComponentRef.current =
+          null;
+
+        cameraFocusRef.current =
+          damp(
+            cameraFocusRef.current,
+            0,
+            5,
+            delta,
+          );
+
+        markerRevealRef.current =
+          0;
+
+
+        root.current.rotation.y +=
+          delta *
+          0.5;
+
+
+        for (
+          const part
+          of wheelShellPartsRef.current
+        ) {
+          part.object.position.x =
+            damp(
+              part.object.position.x,
+              part.original.x,
+              7,
+              delta,
+            );
+        }
+
+
+        if (
+          discPartRef.current
+        ) {
+          const part =
+            discPartRef.current;
+
+          part.object.position.x =
+            damp(
+              part.object.position.x,
+              part.original.x,
+              7,
+              delta,
+            );
+        }
+
+
+        if (
+          padPartRef.current
+        ) {
+          const part =
+            padPartRef.current;
+
+          part.object.position.x =
+            damp(
+              part.object.position.x,
+              part.original.x,
+              7,
+              delta,
+            );
+        }
+
+
+        /*
+         * Keep the engine bay fully assembled
+         * while the AI is still thinking.
+         */
+
+        for (
+          const part
+          of hoodPartsRef.current
+        ) {
+          part.object.position.y =
+            damp(
+              part.object.position.y,
+              part.original.y,
+              8,
+              delta,
+            );
+        }
+
+
+        for (
+          const material
+          of bodyMaterialsRef.current
+        ) {
+          prepareMaterial(
+            material,
+          );
+
+          const originalOpacity =
+            material.userData
+              .originalOpacity as
+              number;
+
+
+          material.opacity =
+            damp(
+              material.opacity,
+              originalOpacity,
+              7,
+              delta,
+            );
+
+
+          if (
+            material.opacity >
+            originalOpacity -
+              0.02
+          ) {
+            material.transparent =
+              material.userData
+                .originalTransparent;
+
+            material.depthWrite =
+              material.userData
+                .originalDepthWrite;
+          }
+        }
+
+
+        return;
+      }
+
+
+      /*
+       * ------------------------------------------------------
+       * IDLE
+       *
+       * Standby must always restore the complete vehicle.
+       * ------------------------------------------------------
+       */
+
+      if (
+        !componentKey
+      ) {
+        timelineRef.current =
+          0;
+
+        lastComponentRef.current =
+          null;
+
+        markerRevealRef.current =
+          0;
+
+        cameraFocusRef.current =
+          damp(
+            cameraFocusRef.current,
+            0,
+            5,
+            delta,
+          );
+
+
+        /*
+         * Restore wheel shell.
+         */
+
+        for (
+          const part
+          of wheelShellPartsRef.current
+        ) {
+          part.object.position.x =
+            damp(
+              part.object.position.x,
+              part.original.x,
+              8,
+              delta,
+            );
+        }
+
+
+        /*
+         * Restore brake disc.
+         */
+
+        if (
+          discPartRef.current
+        ) {
+          const part =
+            discPartRef.current;
+
+          part.object.position.x =
+            damp(
+              part.object.position.x,
+              part.original.x,
+              8,
+              delta,
+            );
+        }
+
+
+        /*
+         * Restore pad / caliper.
+         */
+
+        if (
+          padPartRef.current
+        ) {
+          const part =
+            padPartRef.current;
+
+          part.object.position.x =
+            damp(
+              part.object.position.x,
+              part.original.x,
+              8,
+              delta,
+            );
+        }
+
+
+        /*
+         * Restore engine-bay / hood layers.
+         */
+
+        for (
+          const part
+          of hoodPartsRef.current
+        ) {
+          part.object.position.y =
+            damp(
+              part.object.position.y,
+              part.original.y,
+              8,
+              delta,
+            );
+        }
+
+
+        /*
+         * Restore complete body shell.
+         */
+
+        for (
+          const material
+          of bodyMaterialsRef.current
+        ) {
+          prepareMaterial(
+            material,
+          );
+
+          const originalOpacity =
+            material.userData
+              .originalOpacity as number;
+
+
+          material.opacity =
+            damp(
+              material.opacity,
+              originalOpacity,
+              8,
+              delta,
+            );
+
+
+          if (
+            Math.abs(
+              material.opacity -
+                originalOpacity,
+            ) <
+            0.015
+          ) {
+            material.opacity =
+              originalOpacity;
+
+            material.transparent =
+              material.userData
+                .originalTransparent;
+
+            material.depthWrite =
+              material.userData
+                .originalDepthWrite;
+          }
+        }
+
+
+        /*
+         * Remove any previous diagnostic glow.
+         */
+
+        for (
+          const material
+          of targetMaterialsRef.current
+        ) {
+          prepareMaterial(
+            material,
+          );
+
+          const originalEmissive =
+            material.userData
+              .originalEmissive as THREE.Color;
+
+
+          material.emissive.lerp(
+            originalEmissive,
+            1 -
+              Math.exp(
+                -8 *
+                  delta,
+              ),
+          );
+
+
+          material.emissiveIntensity =
+            damp(
+              material.emissiveIntensity,
+              material.userData
+                .originalEmissiveIntensity,
+              8,
+              delta,
+            );
+        }
+
+
+        /*
+         * Slow showroom rotation only after restoration.
+         */
+
+        root.current.rotation.y +=
+          delta *
+          0.16;
+
+
+        return;
+      }
+
+
+      /*
+       * ------------------------------------------------------
+       * NEW COMPONENT RESULT
+       *
+       * Start timeline from the beginning.
+       * ------------------------------------------------------
+       */
+
+      if (
+        lastComponentRef.current !==
+        componentKey
+      ) {
+        lastComponentRef.current =
+          componentKey;
+
+        timelineRef.current =
+          0;
+
+        cameraFocusRef.current =
+          0;
+
+        markerRevealRef.current =
+          0;
+      }
+
+
+      timelineRef.current +=
+        delta;
+
+
+      const time =
+        timelineRef.current;
+
+
+      /*
+       * ------------------------------------------------------
+       * CROSS-SYSTEM RESTORATION
+       *
+       * Selecting a cooling-system result must restore any
+       * previous brake explosion, and selecting a brake result
+       * must restore any previous engine-bay explosion.
+       * ------------------------------------------------------
+       */
+
+      if (
+        !isBrakeFocus &&
+        !isFrontEndFocus
+      ) {
+        for (
+          const part
+          of wheelShellPartsRef.current
+        ) {
+          part.object.position.x =
+            damp(
+              part.object.position.x,
+              part.original.x,
+              8,
+              delta,
+            );
+        }
+
+
+        if (
+          discPartRef.current
+        ) {
+          const part =
+            discPartRef.current;
+
+          part.object.position.x =
+            damp(
+              part.object.position.x,
+              part.original.x,
+              8,
+              delta,
+            );
+        }
+
+
+        if (
+          padPartRef.current
+        ) {
+          const part =
+            padPartRef.current;
+
+          part.object.position.x =
+            damp(
+              part.object.position.x,
+              part.original.x,
+              8,
+              delta,
+            );
+        }
+      }
+
+
+      if (
+        !isEngineBayFocus
+      ) {
+        for (
+          const part
+          of hoodPartsRef.current
+        ) {
+          part.object.position.y =
+            damp(
+              part.object.position.y,
+              part.original.y,
+              8,
+              delta,
+            );
+        }
+      }
+
+
+      /*
+       * PHASE 1
+       * Orient vehicle.
+       */
+
+      const orientProgress =
+        smoothRange(
+          time,
+          0,
+          0.95,
+        );
+
+
+      root.current.rotation.y =
+        dampAngle(
+          root.current.rotation.y,
+          yawTarget,
+          2.3 +
+            orientProgress *
+              2.5,
+          delta,
+        );
+
+
+      /*
+       * PHASE 2
+       * Camera approaches AFTER orientation begins.
+       */
+
+      const cameraProgress =
+        smoothRange(
+          time,
+          0.75,
+          1.75,
+        );
+
+
+      cameraFocusRef.current =
+        cameraProgress;
+
+
+      /*
+       * PHASE 3
+       * X-ray mode.
+       */
+
+      const xrayProgress =
+        (
+          isBrakeFocus ||
+          isEngineBayFocus ||
+          isFrontEndFocus
+        )
+          ? smoothRange(
+              time,
+              1.6,
+              2.35,
+            )
+          : 0;
+
+
+      const diagnosticBodyOpacity =
+        isEngineBayFocus
+          ? 0.88
+          : isFrontEndFocus
+            ? 0.76
+            : 0.58;
+
+
+      for (
+        const material
+        of bodyMaterialsRef.current
+      ) {
+        prepareMaterial(
+          material,
+        );
+
+
+        const originalOpacity =
+          material.userData
+            .originalOpacity as
+            number;
+
+
+        material.transparent =
+          xrayProgress >
+          0.01
+            ? true
+            : material.userData
+                .originalTransparent;
+
+
+        material.depthWrite =
+          xrayProgress >
+          0.12
+            ? false
+            : material.userData
+                .originalDepthWrite;
+
+
+        material.opacity =
+          THREE.MathUtils.lerp(
+            originalOpacity,
+            diagnosticBodyOpacity,
+            xrayProgress,
+          );
+      }
+
+
+      /*
+       * PHASE 4
+       * Wheel moves outward FIRST.
+       */
+
+      const wheelProgress =
+        (
+          isBrakeFocus ||
+          isFrontEndFocus
+        )
+          ? smoothRange(
+              time,
+              2.35,
+              3.5,
+            )
+          : 0;
+
+
+      for (
+        const part
+        of wheelShellPartsRef.current
+      ) {
+        const targetX =
+          part.original.x +
+          part.amount *
+            wheelProgress;
+
+
+        part.object.position.x =
+          damp(
+            part.object.position.x,
+            targetX,
+            6,
+            delta,
+          );
+      }
+
+
+      /*
+       * PHASE 5
+       *
+       * Only after the wheel is basically clear:
+       * move pad/caliper out of the rotor's way.
+       */
+
+      const secondaryProgress =
+        isBrakeFocus
+          ? smoothRange(
+              time,
+              3.6,
+              4.5,
+            )
+          : 0;
+
+
+      if (
+        padPartRef.current
+      ) {
+        const part =
+          padPartRef.current;
+
+
+        let amount =
+          0;
+
+
+        if (
+          componentKey ===
+          "brake_rotor"
+        ) {
+          amount =
+            0.20 *
+            secondaryProgress;
+        } else if (
+          isFrontEndFocus
+        ) {
+          /*
+           * Steering/suspension:
+           * clear the pad after the wheel is out.
+           */
+          amount =
+            0.15 *
+            smoothRange(
+              time,
+              3.55,
+              4.25,
+            );
+        } else if (
+          componentKey ===
+            "brake_pad" ||
+          componentKey ===
+            "brake_caliper"
+        ) {
+          /*
+           * If pad/caliper itself is the target,
+           * move it less during this stage.
+           */
+          amount =
+            0.07 *
+            secondaryProgress;
+        }
+
+
+        part.object.position.x =
+          damp(
+            part.object.position.x,
+            part.original.x +
+              amount,
+            6,
+            delta,
+          );
+      }
+
+
+      /*
+       * ======================================================
+       * ENGINE-BAY DISASSEMBLY
+       *
+       * Unlike the brake sequence, these pieces move upward
+       * one after another so the user actually watches the
+       * engine compartment being uncovered.
+       * ======================================================
+       */
+
+      if (
+        isEngineBayFocus
+      ) {
+        for (
+          let index = 0;
+          index <
+          hoodPartsRef.current.length;
+          index++
+        ) {
+          const part =
+            hoodPartsRef.current[
+              index
+            ];
+
+
+          /*
+           * Strong stagger:
+           *
+           * part 0 : 2.25s
+           * part 1 : 2.85s
+           * part 2 : 3.45s
+           * part 3 : 4.05s
+           * part 4 : 4.65s
+           */
+
+          const startTime =
+            2.25 +
+            index *
+              0.60;
+
+
+          const endTime =
+            startTime +
+            0.62;
+
+
+          const progress =
+            smoothRange(
+              time,
+              startTime,
+              endTime,
+            );
+
+
+          const targetY =
+            part.original.y +
+            part.amount *
+              progress;
+
+
+          part.object.position.y =
+            damp(
+              part.object.position.y,
+              targetY,
+              7,
+              delta,
+            );
+        }
+      }
+
+
+      /*
+       * PHASE 6
+       * Final target isolation.
+       */
+
+      const isolateProgress =
+        smoothRange(
+          time,
+          4.5,
+          5.25,
+        );
+
+
+      if (
+        discPartRef.current
+      ) {
+        const part =
+          discPartRef.current;
+
+
+        const amount =
+          componentKey ===
+          "brake_rotor"
+            ? 0.065 *
+              isolateProgress
+            : isFrontEndFocus
+              ? 0.13 *
+                smoothRange(
+                  time,
+                  4.25,
+                  4.95,
+                )
+              : componentKey ===
+                    "brake_pad" ||
+                  componentKey ===
+                    "brake_caliper"
+                ? 0.09 *
+                  secondaryProgress
+                : 0;
+
+
+        part.object.position.x =
+          damp(
+            part.object.position.x,
+            part.original.x +
+              amount,
+            6,
+            delta,
+          );
+      }
+
+
+      if (
+        padPartRef.current &&
+        (
+          componentKey ===
+            "brake_pad" ||
+          componentKey ===
+            "brake_caliper"
+        )
+      ) {
+        const part =
+          padPartRef.current;
+
+
+        const amount =
+          0.19 *
+          isolateProgress;
+
+
+        part.object.position.x =
+          damp(
+            part.object.position.x,
+            part.original.x +
+              amount,
+            6,
+            delta,
+          );
+      }
+
+
+      /*
+       * PHASE 7
+       * Target glow starts ONLY after mechanical separation.
+       */
+
+      const glowStart =
+        isEngineBayFocus
+          ? 5.15
+          : isFrontEndFocus
+            ? 5.05
+            : 4.65;
+
+
+      const glowEnd =
+        isEngineBayFocus
+          ? 5.85
+          : isFrontEndFocus
+            ? 5.65
+            : 5.35;
+
+
+      const glowProgress =
+        smoothRange(
+          time,
+          glowStart,
+          glowEnd,
+        );
+
+
+      const pulse =
+        1.8 +
+        (
+          Math.sin(
+            clock.elapsedTime *
+              4.2,
+          ) +
+          1
+        ) *
+          0.85;
+
+
+      for (
+        const material
+        of targetMaterialsRef.current
+      ) {
+        prepareMaterial(
+          material,
+        );
+
+
+        const original =
+          material.userData
+            .originalEmissive as
+            THREE.Color;
+
+
+        /*
+         * Exact brake meshes may glow strongly.
+         *
+         * Engine and axle targets are representative system
+         * regions, so keep their original material readable
+         * instead of turning the whole mesh opaque pink.
+         */
+
+        const representativeTarget =
+          isEngineBayFocus ||
+          isFrontEndFocus;
+
+
+        const glowStrength =
+          representativeTarget
+            ? glowProgress *
+              0.38
+            : glowProgress;
+
+
+        const glowColor =
+          representativeTarget
+            ? new THREE.Color(
+                "#b51f32",
+              )
+            : new THREE.Color(
+                "#ff263e",
+              );
+
+
+        material.emissive
+          .copy(
+            original,
+          )
+          .lerp(
+            glowColor,
+            glowStrength,
+          );
+
+
+        const desiredIntensity =
+          representativeTarget
+            ? 1.35
+            : pulse;
+
+
+        material.emissiveIntensity =
+          THREE.MathUtils.lerp(
+            material.userData
+              .originalEmissiveIntensity,
+            desiredIntensity,
+            glowProgress,
+          );
+      }
+
+
+      /*
+       * PHASE 8
+       * Connector + diagnostic label LAST.
+       */
+
+      const markerStart =
+        isEngineBayFocus
+          ? 5.80
+          : isFrontEndFocus
+            ? 5.65
+            : 5.20;
+
+
+      const markerEnd =
+        isEngineBayFocus
+          ? 6.45
+          : isFrontEndFocus
+            ? 6.30
+            : 5.85;
+
+
+      markerRevealRef.current =
+        smoothRange(
+          time,
+          markerStart,
+          markerEnd,
+        );
+    },
+  );
+  /* eslint-enable react-hooks/immutability */
+
+
+  return (
+    <>
+      <CameraRig
+        target={
+          targetObject
+        }
+        focusRef={
+          cameraFocusRef
+        }
+      />
+
+
+      <group
+        ref={
+          root
+        }
+        scale={
+          scale
+        }
+      >
+        <primitive
+          object={
+            model
+          }
+          position={[
+            -center.x,
+            -center.y -
+              0.2,
+            -center.z,
+          ]}
+        />
+      </group>
+
+
+      {targetObject &&
+        componentKey && (
+          <DiagnosticMarker
+            target={
+              targetObject
+            }
+            label={
+              componentLabel ??
+              "Diagnostic component"
+            }
+            revealRef={
+              markerRevealRef
+            }
+          />
+        )}
+    </>
+  );
+}
+
+
+
+/* ============================================================
+   VEHNEXA_SAFE_DOM_OVERLAY_V2
+
+   Ordinary React DOM only.
+   Never rendered through @react-three/drei Html.
+============================================================ */
+
+type DiagnosticDomPhase = {
+  at: number;
+  label: string;
+  detail: string;
+};
+
+
+type DiagnosticDomState = {
+  index: number;
+  total: number;
+  label: string;
+  detail: string;
+};
+
+
+function diagnosticSequenceFor(
+  hotspotKey:
+    string | null,
+  componentKey:
+    string | null,
+): DiagnosticDomPhase[] {
+  const brake =
+    componentKey ===
+      "brake_rotor" ||
+    componentKey ===
+      "brake_pad" ||
+    componentKey ===
+      "brake_caliper";
+
+
+  const engine =
+    hotspotKey ===
+      "cooling_system" ||
+    hotspotKey ===
+      "engine_bay" ||
+    hotspotKey ===
+      "engine_front" ||
+    hotspotKey ===
+      "battery_area";
+
+
+  const frontEnd =
+    hotspotKey ===
+      "steering_system" ||
+    hotspotKey ===
+      "front_suspension" ||
+    hotspotKey ===
+      "front_left_suspension" ||
+    hotspotKey ===
+      "front_right_suspension";
+
+
+  if (
+    brake
+  ) {
+    return [
+      {
+        at: 0,
+        label:
+          "ORIENTING VEHICLE",
+        detail:
+          "Positioning front brake assembly",
+      },
+      {
+        at: 1500,
+        label:
+          "SCANNING BRAKE SYSTEM",
+        detail:
+          "Mapping the inspection region",
+      },
+      {
+        at: 2350,
+        label:
+          "REMOVING FRONT WHEEL",
+        detail:
+          "Exposing brake hardware",
+      },
+      {
+        at: 3550,
+        label:
+          "CLEARING BRAKE HARDWARE",
+        detail:
+          "Separating surrounding components",
+      },
+      {
+        at: 4650,
+        label:
+          "ISOLATING COMPONENT",
+        detail:
+          "Narrowing the inspection target",
+      },
+      {
+        at: 5200,
+        label:
+          "TARGET FOUND",
+        detail:
+          "Representative component isolated",
+      },
+    ];
+  }
+
+
+  if (
+    engine
+  ) {
+    return [
+      {
+        at: 0,
+        label:
+          "ORIENTING VEHICLE",
+        detail:
+          "Positioning engine bay",
+      },
+      {
+        at: 1500,
+        label:
+          "SCANNING ENGINE BAY",
+        detail:
+          "Mapping engine compartment",
+      },
+      {
+        at: 2250,
+        label:
+          "OPENING ENGINE BAY",
+        detail:
+          "Removing hood layers",
+      },
+      {
+        at: 3900,
+        label:
+          "EXPOSING POWERTRAIN",
+        detail:
+          "Clearing the inspection region",
+      },
+      {
+        at: 5150,
+        label:
+          "ISOLATING SYSTEM",
+        detail:
+          "Narrowing the likely component area",
+      },
+      {
+        at: 5800,
+        label:
+          "TARGET FOUND",
+        detail:
+          "Representative inspection region isolated",
+      },
+    ];
+  }
+
+
+  if (
+    frontEnd
+  ) {
+    return [
+      {
+        at: 0,
+        label:
+          "ORIENTING VEHICLE",
+        detail:
+          "Positioning front-left assembly",
+      },
+      {
+        at: 1500,
+        label:
+          "SCANNING FRONT AXLE",
+        detail:
+          "Mapping steering and suspension",
+      },
+      {
+        at: 2300,
+        label:
+          "REMOVING FRONT WHEEL",
+        detail:
+          "Opening access to front-end hardware",
+      },
+      {
+        at: 3500,
+        label:
+          "CLEARING BRAKE ASSEMBLY",
+        detail:
+          "Removing surrounding brake hardware",
+      },
+      {
+        at: 4950,
+        label:
+          "ISOLATING STEERING SYSTEM",
+        detail:
+          "Exposing axle and steering region",
+      },
+      {
+        at: 5650,
+        label:
+          "TARGET FOUND",
+        detail:
+          "Representative front-end region isolated",
+      },
+    ];
+  }
+
+
+  return [
+    {
+      at: 0,
+      label:
+        "SCANNING VEHICLE",
+      detail:
+        "Mapping diagnostic region",
+    },
+    {
+      at: 3200,
+      label:
+        "ISOLATING SYSTEM",
+      detail:
+        "Narrowing inspection area",
+    },
+    {
+      at: 4300,
+      label:
+        "TARGET FOUND",
+      detail:
+        "Representative inspection region isolated",
+    },
+  ];
+}
+
+
+export default function DiagnosticVehicleStage({
+  hotspotKey,
+  componentKey,
+  componentLabel,
+  relevance,
+  analyzing,
+  diagnosticStep,
+  diagnosticLabel,
+}: DiagnosticVehicleStageProps) {
+
+  const [
+    diagnosticDomState,
+    setDiagnosticDomState,
+  ] =
+    useState<
+      DiagnosticDomState | null
+    >(
+      null,
+    );
+
+
+  useEffect(() => {
+    const timers:
+      number[] =
+      [];
+
+
+    const schedule = (
+      delay:
+        number,
+      value:
+        DiagnosticDomState | null,
+    ) => {
+      const timer =
+        window.setTimeout(
+          () => {
+            setDiagnosticDomState(
+              value,
+            );
+          },
+          delay,
+        );
+
+
+      timers.push(
+        timer,
+      );
+    };
+
+
+    if (
+      analyzing
+    ) {
+      schedule(
+        0,
+        {
+          index: 0,
+          total: 1,
+          label:
+            "ANALYZING SYMPTOMS",
+          detail:
+            "Vehnexa is reasoning about the reported condition",
+        },
+      );
+
+    } else if (
+      !componentKey
+    ) {
+      schedule(
+        0,
+        null,
+      );
+
+    } else {
+      const sequence =
+        diagnosticSequenceFor(
+          hotspotKey,
+          componentKey,
+        );
+
+
+      sequence.forEach(
+        (
+          phase,
+          index,
+        ) => {
+          schedule(
+            phase.at,
+            {
+              index,
+              total:
+                sequence.length,
+              label:
+                phase.label,
+              detail:
+                phase.detail,
+            },
+          );
+        },
+      );
+    }
+
+
+    return () => {
+      for (
+        const timer
+        of timers
+      ) {
+        window.clearTimeout(
+          timer,
+        );
+      }
+    };
+  }, [
+    analyzing,
+    componentKey,
+    hotspotKey,
+  ]);
+
+
+  return (
+    <div className="relative min-h-[430px] flex-1 overflow-hidden">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          background:
+            "radial-gradient(circle at 52% 48%, rgba(49,121,174,0.16), transparent 38%), radial-gradient(circle at 83% 18%, rgba(227,27,45,0.10), transparent 23%)",
+        }}
+      />
+
+
+      <div className="absolute left-5 top-5 z-30 rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2 backdrop-blur-sm">
+        <p className="text-[7px] font-bold uppercase tracking-[0.16em] text-[#71889c]">
+          3D diagnostic map
+        </p>
+
+        <p className="mt-1 text-[9px] text-[#becbd6]">
+          Automated component isolation
+        </p>
+      </div>
+
+
+      <div className="absolute right-5 top-5 z-30 rounded-full border border-white/[0.08] bg-black/20 px-3 py-1.5 backdrop-blur-sm">
+        <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7890a4]">
+          Diagnostic surrogate
+        </p>
+      </div>
+
+
+      <div className="relative h-full w-full">
+        <Canvas
+        dpr={[
+          1,
+          1.75,
+        ]}
+        camera={{
+          position: [
+            6,
+            2.8,
+            7,
+          ],
+
+          fov: 32,
+
+          near: 0.1,
+
+          far: 100,
+        }}
+        gl={{
+          antialias:
+            true,
+
+          alpha:
+            true,
+
+          powerPreference:
+            "high-performance",
+        }}
+        shadows
+      >
+        <ambientLight
+          intensity={
+            1.65
+          }
+        />
+
+        <directionalLight
+          position={[
+            5,
+            8,
+            6,
+          ]}
+          intensity={
+            3.8
+          }
+          castShadow
+        />
+
+        <directionalLight
+          position={[
+            -5,
+            3,
+            -4,
+          ]}
+          intensity={
+            1.7
+          }
+          color="#527fa3"
+        />
+
+        <pointLight
+          position={[
+            -2,
+            1,
+            4,
+          ]}
+          intensity={
+            0.55
+          }
+          color="#e31b2d"
+        />
+
+
+        <Suspense
+          fallback={
+            null
+          }
+        >
+          <VehicleModel
+            hotspotKey={
+              hotspotKey
+            }
+            componentKey={
+              componentKey
+            }
+            componentLabel={
+              componentLabel
+            }
+            analyzing={
+              analyzing
+            }
+          />
+        </Suspense>
+
+
+        <ContactShadows
+          position={[
+            0,
+            -1.6,
+            0,
+          ]}
+          opacity={
+            0.42
+          }
+          scale={
+            9
+          }
+          blur={
+            2.6
+          }
+          far={
+            5
+          }
+        />
+      </Canvas>
+
+        {diagnosticDomState && (
+          <div
+            data-vehnexa-diagnostic-overlay
+            className="pointer-events-none absolute bottom-4 left-4 z-40 w-[240px] overflow-hidden rounded-xl border border-white/10 bg-[#061827]/[0.94] shadow-[0_18px_45px_rgba(0,0,0,0.36)] backdrop-blur-xl"
+          >
+            <div className="h-[2px] bg-white/[0.06]">
+              <div
+                className="h-full bg-[#ef4054] transition-[width] duration-500 ease-out"
+                style={{
+                  width:
+                    analyzing
+                      ? "32%"
+                      : `${
+                          (
+                            (
+                              diagnosticDomState.index +
+                              1
+                            ) /
+                            diagnosticDomState.total
+                          ) *
+                          100
+                        }%`,
+                }}
+              />
+            </div>
+
+
+            <div className="p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ff4d61] opacity-50" />
+
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[#ff4d61]" />
+                  </span>
+
+
+                  <span className="text-[7px] font-bold uppercase tracking-[0.18em] text-[#8297a8]">
+                    Vehnexa diagnostic
+                  </span>
+                </div>
+
+
+                <span className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#ff6978]">
+                  {
+                    analyzing
+                      ? "AI"
+                      : "3D"
+                  }
+                </span>
+              </div>
+
+
+              <p className="mt-2 text-[10px] font-bold tracking-[0.04em] text-white">
+                {
+                  diagnosticDomState.label
+                }
+              </p>
+
+
+              <p className="mt-1 text-[8px] leading-4 text-[#8fa3b3]">
+                {
+                  diagnosticDomState.detail
+                }
+              </p>
+
+
+              {!analyzing &&
+                componentLabel && (
+                  <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-white/[0.07] pt-2">
+                    <span className="text-[6px] font-bold uppercase tracking-[0.15em] text-[#627889]">
+                      Target
+                    </span>
+
+                    <span className="max-w-[135px] truncate text-right text-[8px] font-semibold text-[#ff7180]">
+                      {
+                        componentLabel
+                      }
+                    </span>
+                  </div>
+                )}
+            </div>
+          </div>
+        )}
+      </div>
+
+
+      {analyzing && (
+        <>
+          <div className="pointer-events-none absolute inset-x-[7%] top-1/2 z-20 h-px bg-gradient-to-r from-transparent via-[#ff4f61] to-transparent shadow-[0_0_18px_rgba(255,79,97,0.95)] animate-pulse" />
+
+          <div className="absolute inset-x-5 bottom-5 z-30 rounded-[14px] border border-white/[0.09] bg-[#061522]/92 p-4 backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#e31b2d]/15">
+                <Activity className="h-4 w-4 animate-pulse text-[#ff6574]" />
+              </div>
+
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-[0.16em] text-[#72889b]">
+                  Vehnexa diagnostic engine
+                </p>
+
+                <p className="mt-1 text-[11px] font-semibold text-white">
+                  {diagnosticLabel}
+                </p>
+              </div>
+            </div>
+
+
+            <div className="mt-4 flex gap-1.5">
+              {[
+                0,
+                1,
+                2,
+                3,
+                4,
+              ].map(
+                (
+                  step,
+                ) => (
+                  <div
+                    key={
+                      step
+                    }
+                    className={`h-1 flex-1 rounded-full ${
+                      step <=
+                      diagnosticStep
+                        ? "bg-[#e31b2d]"
+                        : "bg-white/[0.08]"
+                    }`}
+                  />
+                ),
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+
+      {!analyzing &&
+        componentKey && (
+          <div className="pointer-events-none absolute bottom-5 left-5 z-30 flex items-center gap-2">
+            <span
+              className={`rounded-full px-2.5 py-1 text-[7px] font-bold uppercase tracking-[0.1em] ${
+                relevance ===
+                "high"
+                  ? "bg-[#e31b2d] text-white"
+                  : relevance ===
+                      "medium"
+                    ? "bg-[#ffb648] text-[#4b3100]"
+                    : "bg-white/10 text-[#c4d0da]"
+              }`}
+            >
+              {relevance ??
+                "diagnostic"}{" "}
+              focus
+            </span>
+
+            <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[#71889b]">
+              {hotspotKey ??
+                "vehicle"}
+            </span>
+          </div>
+        )}
+    </div>
+  );
+}
+
+

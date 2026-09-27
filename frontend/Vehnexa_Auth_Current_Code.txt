@@ -1,0 +1,1004 @@
+==================================================
+FILE: app\register\page.tsx
+==================================================
+import AutomotiveHero from "@/components/auth/AutomotiveHero";
+import RegisterForm from "@/components/auth/RegisterForm";
+
+export default function RegisterPage() {
+  return (
+    <main className="flex min-h-screen bg-[#070707]">
+      <AutomotiveHero />
+      <RegisterForm />
+    </main>
+  );
+}
+
+
+==================================================
+FILE: app\login\page.tsx
+==================================================
+import AutomotiveHero from "@/components/auth/AutomotiveHero";
+import LoginForm from "@/components/auth/LoginForm";
+
+export default function LoginPage() {
+  return (
+    <main className="flex min-h-screen bg-[#020202]">
+      <AutomotiveHero />
+      <LoginForm />
+    </main>
+  );
+}
+
+
+==================================================
+FILE: components\auth\AutomotiveHero.tsx
+==================================================
+"use client";
+
+import Image from "next/image";
+import { motion } from "framer-motion";
+import {
+  Bot,
+  CarFront,
+  CheckCircle2,
+  Gauge,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
+
+const features = [
+  {
+    icon: CarFront,
+    title: "Your Digital Garage",
+    description: "Save your vehicles and manage them from one place.",
+  },
+  {
+    icon: Search,
+    title: "Compatible Parts",
+    description: "Find products matched to your exact vehicle.",
+  },
+  {
+    icon: Bot,
+    title: "AI Mechanic",
+    description: "Describe symptoms and get intelligent guidance.",
+  },
+];
+
+export default function AutomotiveHero() {
+  return (
+    <section className="relative hidden min-h-screen overflow-hidden bg-[#121416] lg:flex lg:w-[54%] lg:flex-col">
+      {/* Background */}
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute inset-0 opacity-[0.022]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px)",
+            backgroundSize: "72px 72px",
+          }}
+        />
+
+        <div className="absolute -bottom-72 -left-64 h-[650px] w-[650px] rounded-full bg-red-700/[0.11] blur-[190px]" />
+      </div>
+
+      {/* Header */}
+      <header className="relative z-30 flex items-center justify-between px-12 pt-9 xl:px-16">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-600 shadow-[0_10px_35px_rgba(220,38,38,.18)]">
+            <Gauge className="h-5 w-5 text-white" />
+          </div>
+
+          <div>
+            <p className="text-lg font-black tracking-[0.16em] text-white">
+              PART<span className="text-red-500">PILOT</span>
+            </p>
+
+            <p className="text-[7px] font-semibold tracking-[0.28em] text-zinc-500">
+              AUTOMOTIVE INTELLIGENCE
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 rounded-full border border-white/[0.09] bg-white/[0.035] px-4 py-2">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />
+            <span className="relative h-2 w-2 rounded-full bg-emerald-500" />
+          </span>
+
+          <span className="text-[9px] font-semibold tracking-[0.14em] text-zinc-400">
+            PLATFORM ONLINE
+          </span>
+        </div>
+      </header>
+
+      {/* Text */}
+      <div className="relative z-30 px-12 pt-12 xl:px-16">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7 }}
+        >
+          <p className="mb-5 text-[10px] font-bold uppercase tracking-[0.24em] text-red-500">
+            Smarter automotive ownership
+          </p>
+
+          <h1 className="max-w-[650px] text-5xl font-bold leading-[0.98] tracking-[-0.05em] text-white xl:text-[3.7rem] 2xl:text-[4.2rem]">
+            Your garage
+            <br />
+            starts here.
+          </h1>
+
+          <p className="mt-6 max-w-[590px] text-[15px] leading-7 text-zinc-400">
+            Find compatible auto parts, understand vehicle problems
+            and manage your cars with one intelligent platform.
+          </p>
+        </motion.div>
+      </div>
+
+      {/* Car */}
+      <div className="relative z-20 mt-3 h-[400px] overflow-hidden">
+        <div className="pointer-events-none absolute bottom-[-90px] left-[7%] h-[250px] w-[86%] rounded-full bg-red-700/[0.11] blur-[110px]" />
+
+        <motion.div
+          initial={{
+            opacity: 0,
+            x: -30,
+            scale: 1.025,
+          }}
+          animate={{
+            opacity: 1,
+            x: 0,
+            scale: 1,
+          }}
+          transition={{
+            delay: 0.12,
+            duration: 0.9,
+            ease: "easeOut",
+          }}
+          className="absolute inset-0"
+        >
+          <Image
+            src="/images/partpilot-hero-car.jpg"
+            alt="PartPilot performance vehicle"
+            fill
+            priority
+            sizes="54vw"
+            className="object-cover object-[center_46%]"
+          />
+
+          {/* Image blending */}
+          <div className="absolute inset-x-0 top-0 h-[90px] bg-gradient-to-b from-[#121416] via-[#121416]/70 to-transparent" />
+
+          <div className="absolute inset-x-0 bottom-0 h-[115px] bg-gradient-to-t from-[#121416] via-[#121416]/35 to-transparent" />
+
+          <div className="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-[#121416] to-transparent" />
+
+          <div className="absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-[#121416] to-transparent" />
+
+          <div className="absolute inset-0 bg-black/[0.07]" />
+        </motion.div>
+
+        {/* Simple vehicle card */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="absolute bottom-9 left-12 z-30 xl:left-16"
+        >
+          <div className="rounded-xl border border-white/[0.1] bg-[#111315]/85 px-5 py-4 shadow-[0_12px_35px_rgba(0,0,0,.25)] backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500/10">
+                <CheckCircle2 className="h-4 w-4 text-red-500" />
+              </div>
+
+              <div>
+                <p className="text-[8px] font-semibold uppercase tracking-[0.17em] text-zinc-500">
+                  Vehicle matching
+                </p>
+
+                <p className="mt-1 text-xs font-semibold text-white">
+                  Find the right part the first time
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Features */}
+      <div className="relative z-30 mt-auto px-12 pb-8 xl:px-16">
+        <div className="grid grid-cols-3 gap-3">
+          {features.map((feature) => {
+            const Icon = feature.icon;
+
+            return (
+              <div
+                key={feature.title}
+                className="rounded-xl border border-white/[0.075] bg-[#1a1c1e] p-4 transition duration-200 hover:border-white/[0.13] hover:bg-[#1e2022]"
+              >
+                <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.045]">
+                  <Icon className="h-4 w-4 text-red-500" />
+                </div>
+
+                <p className="text-xs font-semibold text-white">
+                  {feature.title}
+                </p>
+
+                <p className="mt-2 text-[10px] leading-[1.7] text-zinc-500">
+                  {feature.description}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-6 flex items-center gap-2 text-[9px] text-zinc-600">
+          <ShieldCheck className="h-4 w-4" />
+
+          <span>
+            Secure account · Vehicle-specific results · AI-assisted
+            guidance
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+==================================================
+FILE: components\auth\RegisterForm.tsx
+==================================================
+"use client";
+
+import Link from "next/link";
+import { FormEvent, ReactNode, useState } from "react";
+import { motion } from "framer-motion";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Loader2,
+  LockKeyhole,
+  Mail,
+  Phone,
+  UserRound,
+} from "lucide-react";
+
+import { ApiError, registerUser } from "@/lib/api";
+
+type FormState = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+};
+
+const initialState: FormState = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  password: "",
+  confirmPassword: "",
+};
+
+export default function RegisterForm() {
+  const [form, setForm] = useState<FormState>(initialState);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  function updateField(field: keyof FormState, value: string) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setError("");
+    setSuccess("");
+
+    if (form.firstName.trim().length < 2) {
+      setError("Please enter a valid first name.");
+      return;
+    }
+
+    if (form.lastName.trim().length < 2) {
+      setError("Please enter a valid last name.");
+      return;
+    }
+
+    if (form.password.length < 8) {
+      setError("Password must contain at least 8 characters.");
+      return;
+    }
+
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const user = await registerUser({
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim() || undefined,
+        password: form.password,
+      });
+
+      setSuccess(
+        `Account created successfully. Welcome to PartPilot, ${user.first_name}.`,
+      );
+
+      setForm(initialState);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Unable to connect to PartPilot. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="relative flex min-h-screen flex-1 items-center justify-center bg-[#f6f7f8] px-6 py-12 sm:px-10 xl:px-14">
+      <motion.div
+        initial={{ opacity: 0, x: 22 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.55 }}
+        className="w-full max-w-[570px]"
+      >
+        <MobileLogo />
+
+        <div className="mb-8">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-red-600">
+            Create account
+          </p>
+
+          <h1 className="text-[42px] font-bold leading-[1.05] tracking-[-0.045em] text-[#171717] sm:text-[48px]">
+            Join PartPilot.
+          </h1>
+
+          <p className="mt-4 max-w-[480px] text-sm leading-6 text-gray-500">
+            Create your account to save vehicles, find compatible
+            parts and access AI-powered automotive guidance.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-[#e2e4e8] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.045)] sm:p-8">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <InputField
+                label="First name"
+                value={form.firstName}
+                placeholder="Bakr"
+                icon={<UserRound />}
+                onChange={(value) =>
+                  updateField("firstName", value)
+                }
+              />
+
+              <InputField
+                label="Last name"
+                value={form.lastName}
+                placeholder="El Achkar"
+                icon={<UserRound />}
+                onChange={(value) =>
+                  updateField("lastName", value)
+                }
+              />
+            </div>
+
+            <InputField
+              label="Email address"
+              type="email"
+              value={form.email}
+              placeholder="you@example.com"
+              icon={<Mail />}
+              onChange={(value) =>
+                updateField("email", value)
+              }
+            />
+
+            <InputField
+              label="Phone number"
+              type="tel"
+              value={form.phone}
+              placeholder="+961 70 123 456"
+              icon={<Phone />}
+              required={false}
+              onChange={(value) =>
+                updateField("phone", value)
+              }
+            />
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <PasswordField
+                label="Password"
+                value={form.password}
+                show={showPassword}
+                onToggle={() =>
+                  setShowPassword((current) => !current)
+                }
+                onChange={(value) =>
+                  updateField("password", value)
+                }
+              />
+
+              <PasswordField
+                label="Confirm password"
+                value={form.confirmPassword}
+                show={showPassword}
+                onToggle={() =>
+                  setShowPassword((current) => !current)
+                }
+                onChange={(value) =>
+                  updateField("confirmPassword", value)
+                }
+              />
+            </div>
+
+            <div className="rounded-xl border border-gray-100 bg-[#f8f9fa] px-4 py-3 text-xs leading-5 text-gray-500">
+              By creating an account, you agree to PartPilot&apos;s
+              terms. AI diagnostic guidance does not replace a
+              professional mechanical inspection.
+            </div>
+
+            {error && (
+              <StatusMessage type="error" message={error} />
+            )}
+
+            {success && (
+              <StatusMessage type="success" message={success} />
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="group flex h-13 w-full items-center justify-between rounded-xl bg-red-600 px-5 text-sm font-semibold text-white shadow-[0_5px_14px_rgba(220,38,38,.15)] transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span>
+                {loading
+                  ? "Creating account..."
+                  : "Create account"}
+              </span>
+
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+              )}
+            </button>
+          </form>
+        </div>
+
+        <p className="mt-7 text-center text-sm text-gray-500">
+          Already have an account?{" "}
+          <Link
+            href="/login"
+            className="font-semibold text-[#171717] transition hover:text-red-600"
+          >
+            Sign in
+          </Link>
+        </p>
+
+        <p className="mt-8 text-center text-xs text-gray-400">
+          Secure account · Vehicle compatibility · AI assistance
+        </p>
+      </motion.div>
+    </section>
+  );
+}
+
+function MobileLogo() {
+  return (
+    <div className="mb-10 flex items-center gap-3 lg:hidden">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-600 font-black text-white">
+        P
+      </div>
+
+      <p className="font-black tracking-[0.14em] text-[#171717]">
+        PART<span className="text-red-600">PILOT</span>
+      </p>
+    </div>
+  );
+}
+
+function InputField({
+  label,
+  value,
+  placeholder,
+  icon,
+  onChange,
+  type = "text",
+  required = true,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  icon: ReactNode;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-gray-700">
+        {label}
+      </span>
+
+      <div className="relative">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 [&>svg]:h-4 [&>svg]:w-4">
+          {icon}
+        </div>
+
+        <input
+          required={required}
+          type={type}
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+          className="partpilot-input h-12 w-full rounded-xl border border-[#dfe2e6] bg-white pl-11 pr-4 text-sm text-[#202124] outline-none transition placeholder:text-gray-400 hover:border-[#cdd1d6] focus:border-red-400 focus:ring-4 focus:ring-red-50"
+        />
+      </div>
+    </label>
+  );
+}
+
+function PasswordField({
+  label,
+  value,
+  show,
+  onToggle,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  show: boolean;
+  onToggle: () => void;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-gray-700">
+        {label}
+      </span>
+
+      <div className="relative">
+        <LockKeyhole className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+
+        <input
+          required
+          minLength={8}
+          type={show ? "text" : "password"}
+          value={value}
+          placeholder="••••••••"
+          onChange={(event) => onChange(event.target.value)}
+          className="partpilot-input h-12 w-full rounded-xl border border-[#dfe2e6] bg-white pl-11 pr-12 text-sm text-[#202124] outline-none transition placeholder:text-gray-400 hover:border-[#cdd1d6] focus:border-red-400 focus:ring-4 focus:ring-red-50"
+        />
+
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={show ? "Hide password" : "Show password"}
+          className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-700"
+        >
+          {show ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+    </label>
+  );
+}
+
+function StatusMessage({
+  type,
+  message,
+}: {
+  type: "error" | "success";
+  message: string;
+}) {
+  const success = type === "success";
+
+  return (
+    <div
+      className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-sm ${
+        success
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-red-200 bg-red-50 text-red-700"
+      }`}
+    >
+      {success && (
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+      )}
+
+      {message}
+    </div>
+  );
+}
+
+
+==================================================
+FILE: components\auth\LoginForm.tsx
+==================================================
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Loader2,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+} from "lucide-react";
+
+import { ApiError, loginUser } from "@/lib/api";
+import { saveAccessToken } from "@/lib/auth";
+
+export default function LoginForm() {
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    setError("");
+
+    try {
+      setLoading(true);
+
+      const result = await loginUser({
+        email: email.trim(),
+        password,
+      });
+
+      saveAccessToken(result.access_token);
+
+      router.push("/account");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(
+          err.status === 401
+            ? "Invalid email or password."
+            : err.message,
+        );
+      } else {
+        setError(
+          "Unable to connect to PartPilot. Please try again.",
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="relative flex min-h-screen flex-1 items-center justify-center bg-[#f6f7f8] px-6 py-12 sm:px-10 xl:px-14">
+      <motion.div
+        initial={{ opacity: 0, x: 22 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.55 }}
+        className="w-full max-w-[530px]"
+      >
+        <MobileLogo />
+
+        <div className="mb-8">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-red-600">
+            Account access
+          </p>
+
+          <h1 className="text-[42px] font-bold leading-[1.05] tracking-[-0.045em] text-[#171717] sm:text-[48px]">
+            Welcome back.
+          </h1>
+
+          <p className="mt-4 max-w-md text-sm leading-6 text-gray-500">
+            Sign in to access your garage, compatible parts,
+            orders and PartPilot AI Mechanic.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-[#e2e4e8] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.045)] sm:p-8">
+          <div className="mb-6 flex items-center gap-3 rounded-xl border border-gray-100 bg-[#f8f9fa] px-4 py-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white shadow-sm">
+              <ShieldCheck className="h-[18px] w-[18px] text-red-600" />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-gray-800">
+                Secure account access
+              </p>
+
+              <p className="mt-0.5 text-xs text-gray-500">
+                Sign in to your personal PartPilot garage.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-gray-700">
+                Email address
+              </span>
+
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+
+                <input
+                  required
+                  type="email"
+                  value={email}
+                  placeholder="you@example.com"
+                  onChange={(event) =>
+                    setEmail(event.target.value)
+                  }
+                  className="partpilot-input h-12 w-full rounded-xl border border-[#dfe2e6] bg-white pl-11 pr-4 text-sm text-[#202124] outline-none transition placeholder:text-gray-400 hover:border-[#cdd1d6] focus:border-red-400 focus:ring-4 focus:ring-red-50"
+                />
+              </div>
+            </label>
+
+            <label className="block">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">
+                  Password
+                </span>
+
+                <button
+                  type="button"
+                  className="text-xs font-medium text-red-600 transition hover:text-red-700"
+                >
+                  Forgot password?
+                </button>
+              </div>
+
+              <div className="relative">
+                <LockKeyhole className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+
+                <input
+                  required
+                  minLength={8}
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  placeholder="••••••••"
+                  onChange={(event) =>
+                    setPassword(event.target.value)
+                  }
+                  className="partpilot-input h-12 w-full rounded-xl border border-[#dfe2e6] bg-white pl-11 pr-12 text-sm text-[#202124] outline-none transition placeholder:text-gray-400 hover:border-[#cdd1d6] focus:border-red-400 focus:ring-4 focus:ring-red-50"
+                />
+
+                <button
+                  type="button"
+                  aria-label={
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                  onClick={() =>
+                    setShowPassword(
+                      (current) => !current,
+                    )
+                  }
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-700"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </label>
+
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="group flex h-13 w-full items-center justify-between rounded-xl bg-red-600 px-5 text-sm font-semibold text-white shadow-[0_5px_14px_rgba(220,38,38,.15)] transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span>
+                {loading
+                  ? "Signing in..."
+                  : "Sign in"}
+              </span>
+
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+              )}
+            </button>
+          </form>
+        </div>
+
+        <p className="mt-7 text-center text-sm text-gray-500">
+          New to PartPilot?{" "}
+          <Link
+            href="/register"
+            className="font-semibold text-[#171717] transition hover:text-red-600"
+          >
+            Create account
+          </Link>
+        </p>
+
+        <p className="mt-8 text-center text-xs text-gray-400">
+          Secure access · Personal garage · AI assistance
+        </p>
+      </motion.div>
+    </section>
+  );
+}
+
+function MobileLogo() {
+  return (
+    <div className="mb-10 flex items-center gap-3 lg:hidden">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-600 font-black text-white">
+        P
+      </div>
+
+      <p className="font-black tracking-[0.14em] text-[#171717]">
+        PART<span className="text-red-600">PILOT</span>
+      </p>
+    </div>
+  );
+}
+
+
+==================================================
+FILE: lib\api.ts
+==================================================
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+export type RegisterPayload = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  password: string;
+};
+
+export type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+export type UserPublic = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string | null;
+  role: string;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+};
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+async function readResponse(response: Response) {
+  const contentType = response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail: text || "Unexpected server response.",
+  };
+}
+
+export async function registerUser(
+  payload: RegisterPayload,
+): Promise<UserPublic> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to create account.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function loginUser(
+  payload: LoginPayload,
+): Promise<TokenResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to sign in.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function getCurrentUser(
+  token: string,
+): Promise<UserPublic> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load your account.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+

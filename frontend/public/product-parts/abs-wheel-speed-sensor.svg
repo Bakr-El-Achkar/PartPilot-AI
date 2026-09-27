@@ -1,0 +1,72 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+  <rect width="1000" height="700" fill="#ffffff"/>
+
+  <path
+    d="M190 365
+       C285 170 470 160 575 260
+       C640 320 645 400 725 410"
+    fill="none"
+    stroke="#252a2f"
+    stroke-width="30"
+    stroke-linecap="round"
+  />
+
+  <g transform="translate(110 320)">
+    <rect
+      x="0"
+      y="0"
+      width="125"
+      height="75"
+      rx="22"
+      fill="#4c5359"
+    />
+
+    <rect
+      x="15"
+      y="17"
+      width="55"
+      height="41"
+      rx="12"
+      fill="#6e757b"
+    />
+  </g>
+
+  <g transform="translate(705 365)">
+    <rect
+      x="0"
+      y="0"
+      width="145"
+      height="90"
+      rx="24"
+      fill="#41474c"
+    />
+
+    <rect
+      x="105"
+      y="20"
+      width="75"
+      height="50"
+      rx="12"
+      fill="#6d747a"
+    />
+
+    <circle
+      cx="30"
+      cy="45"
+      r="12"
+      fill="#c3c8cc"
+    />
+  </g>
+
+  <text
+    x="500"
+    y="620"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+    font-size="28"
+    font-weight="700"
+    fill="#667085"
+  >
+    ABS WHEEL SPEED SENSOR
+  </text>
+</svg>

@@ -1,0 +1,41 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+  <rect width="1000" height="700" fill="#ffffff"/>
+
+  <g transform="translate(165 160)">
+    <path
+      d="M70 250 C75 125 155 60 280 60 C405 60 490 125 495 250 L450 350 L115 350 Z"
+      fill="#30363c"
+      stroke="#171b1f"
+      stroke-width="15"
+    />
+
+    <path
+      d="M125 245 C135 160 190 115 280 115 C370 115 425 160 440 245"
+      fill="none"
+      stroke="#727980"
+      stroke-width="40"
+    />
+
+    <circle cx="150" cy="305" r="20" fill="#a8afb5"/>
+    <circle cx="415" cy="305" r="20" fill="#a8afb5"/>
+
+    <path
+      d="M380 310 C390 215 460 155 565 155 C665 155 730 215 740 310 L700 400 L410 400 Z"
+      fill="#444b51"
+      stroke="#202429"
+      stroke-width="14"
+    />
+  </g>
+
+  <text
+    x="500"
+    y="620"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+    font-size="28"
+    font-weight="700"
+    fill="#667085"
+  >
+    BRAKE PAD
+  </text>
+</svg>

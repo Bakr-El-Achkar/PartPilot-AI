@@ -1,0 +1,1766 @@
+"use client";
+
+import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
+
+import Link from "next/link";
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  BadgeCheck,
+  Bell,
+  Bot,
+  CarFront,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  LayoutDashboard,
+  MessageSquare,
+  Package,
+  Search,
+  Shapes,
+  ShoppingBag,
+  Star,
+  Tags,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+
+import {
+  ApiError,
+  getCurrentUser,
+  type UserPublic,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import {
+  getAdminReviews,
+  updateAdminReviewStatus,
+  type AdminReview,
+} from "@/lib/admin";
+
+
+type VisibilityFilter =
+  | "all"
+  | "visible"
+  | "hidden";
+
+
+type RatingFilter =
+  | "all"
+  | "5"
+  | "4"
+  | "3"
+  | "2"
+  | "1";
+
+
+const PAGE_SIZE =
+  50;
+
+
+export default function AdminReviewsPage() {
+  const router =
+    useRouter();
+
+
+  const [
+    currentUser,
+    setCurrentUser,
+  ] =
+    useState<UserPublic | null>(
+      null,
+    );
+
+
+  const [
+    reviews,
+    setReviews,
+  ] =
+    useState<AdminReview[]>(
+      [],
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true,
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    search,
+    setSearch,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    visibilityFilter,
+    setVisibilityFilter,
+  ] =
+    useState<VisibilityFilter>(
+      "all",
+    );
+
+
+  const [
+    ratingFilter,
+    setRatingFilter,
+  ] =
+    useState<RatingFilter>(
+      "all",
+    );
+
+
+  const [
+    currentPage,
+    setCurrentPage,
+  ] =
+    useState(
+      1,
+    );
+
+
+  const [
+    selectedReview,
+    setSelectedReview,
+  ] =
+    useState<AdminReview | null>(
+      null,
+    );
+
+
+  const [
+    updatingId,
+    setUpdatingId,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+
+  useEffect(() => {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.replace(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    const accessToken =
+      token;
+
+    let cancelled =
+      false;
+
+
+    async function load() {
+      try {
+        const me =
+          await getCurrentUser(
+            accessToken,
+          );
+
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+
+        if (
+          me.role !==
+          "admin"
+        ) {
+          router.replace(
+            "/",
+          );
+
+          return;
+        }
+
+
+        const result =
+          await getAdminReviews(
+            accessToken,
+          );
+
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+
+        setCurrentUser(
+          me,
+        );
+
+        setReviews(
+          result,
+        );
+
+      } catch (
+        loadError
+      ) {
+        if (
+          loadError instanceof
+            ApiError &&
+          loadError.status ===
+            401
+        ) {
+          removeAccessToken();
+
+          router.replace(
+            "/login",
+          );
+
+          return;
+        }
+
+
+        if (
+          loadError instanceof
+            ApiError &&
+          loadError.status ===
+            403
+        ) {
+          router.replace(
+            "/",
+          );
+
+          return;
+        }
+
+
+        if (
+          !cancelled
+        ) {
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load reviews.",
+          );
+        }
+
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setLoading(
+            false,
+          );
+        }
+      }
+    }
+
+
+    void load();
+
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    router,
+  ]);
+
+
+  const visibleCount =
+    reviews.filter(
+      (
+        review,
+      ) =>
+        review.is_active,
+    ).length;
+
+
+  const hiddenCount =
+    reviews.length -
+    visibleCount;
+
+
+  const verifiedCount =
+    reviews.filter(
+      (
+        review,
+      ) =>
+        review.verified_purchase,
+    ).length;
+
+
+  const filteredReviews =
+    useMemo(
+      () => {
+        const needle =
+          search
+            .trim()
+            .toLowerCase();
+
+
+        return reviews.filter(
+          (
+            review,
+          ) => {
+            if (
+              visibilityFilter ===
+                "visible" &&
+              !review.is_active
+            ) {
+              return false;
+            }
+
+
+            if (
+              visibilityFilter ===
+                "hidden" &&
+              review.is_active
+            ) {
+              return false;
+            }
+
+
+            if (
+              ratingFilter !==
+                "all" &&
+              review.rating !==
+                Number(
+                  ratingFilter,
+                )
+            ) {
+              return false;
+            }
+
+
+            if (!needle) {
+              return true;
+            }
+
+
+            return [
+              review.id,
+              review.product_id,
+              review.product_name,
+              review.product_sku,
+              review.customer_name,
+              review.customer_email,
+              review.user_id,
+              review.order_id,
+              review.order_number,
+              review.comment,
+            ].some(
+              (
+                value,
+              ) =>
+                value
+                  .toLowerCase()
+                  .includes(
+                    needle,
+                  ),
+            );
+          },
+        );
+      },
+      [
+        reviews,
+        search,
+        visibilityFilter,
+        ratingFilter,
+      ],
+    );
+
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        filteredReviews.length /
+          PAGE_SIZE,
+      ),
+    );
+
+
+  const safePage =
+    Math.min(
+      currentPage,
+      totalPages,
+    );
+
+
+  const pageReviews =
+    filteredReviews.slice(
+      (
+        safePage -
+        1
+      ) *
+        PAGE_SIZE,
+      safePage *
+        PAGE_SIZE,
+    );
+
+
+  const adminName =
+    currentUser
+      ? `${currentUser.first_name} ${currentUser.last_name}`.trim()
+      : "Administrator";
+
+
+  async function changeVisibility(
+    review:
+      AdminReview,
+    nextActive:
+      boolean,
+  ) {
+    if (
+      updatingId
+    ) {
+      return;
+    }
+
+
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.replace(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    const confirmed =
+      window.confirm(
+        nextActive
+          ? "Restore this review? It will appear on the product page and be included in the product rating again."
+          : "Hide this review? It will disappear from the product page and be excluded from the product rating.",
+      );
+
+
+    if (!confirmed) {
+      return;
+    }
+
+
+    try {
+      setUpdatingId(
+        review.id,
+      );
+
+      setError(
+        "",
+      );
+
+
+      const updated =
+        await updateAdminReviewStatus(
+          token,
+          review.id,
+          nextActive,
+        );
+
+
+      setReviews(
+        (
+          current,
+        ) =>
+          current.map(
+            (
+              item,
+            ) =>
+              item.id ===
+              updated.id
+                ? updated
+                : item,
+          ),
+      );
+
+
+      setSelectedReview(
+        (
+          current,
+        ) =>
+          current?.id ===
+          updated.id
+            ? updated
+            : current,
+      );
+
+    } catch (
+      updateError
+    ) {
+      if (
+        updateError instanceof
+          ApiError &&
+        updateError.status ===
+          401
+      ) {
+        removeAccessToken();
+
+        router.replace(
+          "/login",
+        );
+
+        return;
+      }
+
+
+      if (
+        updateError instanceof
+          ApiError &&
+        updateError.status ===
+          403
+      ) {
+        router.replace(
+          "/",
+        );
+
+        return;
+      }
+
+
+      setError(
+        updateError instanceof
+          Error
+          ? updateError.message
+          : "Unable to update review visibility.",
+      );
+
+    } finally {
+      setUpdatingId(
+        null,
+      );
+    }
+  }
+
+
+  return (
+    <main className="min-h-screen bg-[#f5f6f8] text-[#101828]">
+      <div className="flex min-h-screen">
+        <AdminSidebar />
+
+
+        <section className="min-w-0 flex-1">
+          <header className="flex h-[70px] items-center justify-between border-b border-[#e4e7ec] bg-white px-5 sm:px-8">
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#98a2b3]">
+                Admin Console
+              </p>
+
+              <p className="mt-1 text-[12px] font-semibold text-[#344054]">
+                {
+                  adminName
+                }
+              </p>
+            </div>
+
+
+            <Link
+              href="/"
+              className="flex items-center gap-2 rounded-[7px] border border-[#d0d5dd] bg-white px-4 py-2 text-[9px] font-semibold"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+
+              Store
+            </Link>
+          </header>
+
+
+          <div className="mx-auto max-w-[1450px] p-5 sm:p-8">
+            <div>
+              <h1 className="text-[28px] font-bold tracking-[-0.035em]">
+                Reviews
+              </h1>
+
+              <p className="mt-2 text-[11px] text-[#667085]">
+                Moderate verified customer feedback and control storefront visibility.
+              </p>
+            </div>
+
+
+            <section className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                label="Total reviews"
+                value={
+                  reviews.length
+                }
+              />
+
+              <MetricCard
+                label="Visible"
+                value={
+                  visibleCount
+                }
+              />
+
+              <MetricCard
+                label="Hidden"
+                value={
+                  hiddenCount
+                }
+              />
+
+              <MetricCard
+                label="Verified purchases"
+                value={
+                  verifiedCount
+                }
+              />
+            </section>
+
+
+            {error && (
+              <div className="mt-5 rounded-[8px] border border-[#fecdca] bg-[#fff4f5] px-4 py-3 text-[10px] text-[#b42318]">
+                {
+                  error
+                }
+              </div>
+            )}
+
+
+            <div className="mt-7 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="relative w-full xl:max-w-[390px]">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#98a2b3]" />
+
+                <input
+                  value={
+                    search
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) => {
+                      setSearch(
+                        event.target.value,
+                      );
+
+                      setCurrentPage(
+                        1,
+                      );
+                    }
+                  }
+                  placeholder="Search customer, product, order or comment..."
+                  className="h-10 w-full rounded-[7px] border border-[#d0d5dd] bg-white pl-9 pr-3 text-[10px] outline-none"
+                />
+              </div>
+
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <select
+                  value={
+                    ratingFilter
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) => {
+                      setRatingFilter(
+                        event.target.value as
+                          RatingFilter,
+                      );
+
+                      setCurrentPage(
+                        1,
+                      );
+                    }
+                  }
+                  className="h-10 rounded-[7px] border border-[#d0d5dd] bg-white px-3 text-[10px]"
+                >
+                  <option value="all">
+                    All ratings
+                  </option>
+
+                  <option value="5">
+                    5 stars
+                  </option>
+
+                  <option value="4">
+                    4 stars
+                  </option>
+
+                  <option value="3">
+                    3 stars
+                  </option>
+
+                  <option value="2">
+                    2 stars
+                  </option>
+
+                  <option value="1">
+                    1 star
+                  </option>
+                </select>
+
+
+                <select
+                  value={
+                    visibilityFilter
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) => {
+                      setVisibilityFilter(
+                        event.target.value as
+                          VisibilityFilter,
+                      );
+
+                      setCurrentPage(
+                        1,
+                      );
+                    }
+                  }
+                  className="h-10 rounded-[7px] border border-[#d0d5dd] bg-white px-3 text-[10px]"
+                >
+                  <option value="all">
+                    All visibility
+                  </option>
+
+                  <option value="visible">
+                    Visible
+                  </option>
+
+                  <option value="hidden">
+                    Hidden
+                  </option>
+                </select>
+              </div>
+            </div>
+
+
+            <div className="mt-4 overflow-hidden rounded-[14px] border border-[#dfe3e8] bg-white">
+              {loading ? (
+                <div className="space-y-3 p-5">
+                  {[
+                    1,
+                    2,
+                    3,
+                    4,
+                  ].map(
+                    (
+                      item,
+                    ) => (
+                      <div
+                        key={
+                          item
+                        }
+                        className="h-[78px] animate-pulse rounded-[8px] bg-[#f2f4f7]"
+                      />
+                    ),
+                  )}
+                </div>
+              ) : pageReviews.length ===
+                0 ? (
+                <div className="px-6 py-16 text-center">
+                  <MessageSquare className="mx-auto h-8 w-8 text-[#98a2b3]" />
+
+                  <p className="mt-4 text-[12px] font-semibold">
+                    No reviews found
+                  </p>
+
+                  <p className="mt-1 text-[9px] text-[#667085]">
+                    Try changing the current search or filters.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1120px] border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#eaecf0] bg-[#fafbfc] text-left">
+                        <TableHeading>
+                          Customer
+                        </TableHeading>
+
+                        <TableHeading>
+                          Product
+                        </TableHeading>
+
+                        <TableHeading>
+                          Rating
+                        </TableHeading>
+
+                        <TableHeading>
+                          Review
+                        </TableHeading>
+
+                        <TableHeading>
+                          Order
+                        </TableHeading>
+
+                        <TableHeading>
+                          Status
+                        </TableHeading>
+
+                        <TableHeading>
+                          Actions
+                        </TableHeading>
+                      </tr>
+                    </thead>
+
+
+                    <tbody>
+                      {pageReviews.map(
+                        (
+                          review,
+                        ) => (
+                          <tr
+                            key={
+                              review.id
+                            }
+                            className="border-b border-[#eaecf0] last:border-0 hover:bg-[#fafbfc]"
+                          >
+                            <TableCell>
+                              <p className="font-semibold text-[#101828]">
+                                {
+                                  review.customer_name
+                                }
+                              </p>
+
+                              <p className="mt-1 max-w-[180px] truncate text-[8px] text-[#98a2b3]">
+                                {
+                                  review.customer_email ||
+                                  "No email"
+                                }
+                              </p>
+
+                              {review.verified_purchase && (
+                                <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-[#abefc6] bg-[#ecfdf3] px-2 py-0.5 text-[7px] font-semibold text-[#067647]">
+                                  <BadgeCheck className="h-2.5 w-2.5" />
+
+                                  Verified
+                                </span>
+                              )}
+                            </TableCell>
+
+
+                            <TableCell>
+                              <p className="max-w-[190px] truncate font-semibold text-[#344054]">
+                                {
+                                  review.product_name
+                                }
+                              </p>
+
+                              <p className="mt-1 text-[8px] text-[#98a2b3]">
+                                {
+                                  review.product_sku ||
+                                  review.product_id
+                                }
+                              </p>
+                            </TableCell>
+
+
+                            <TableCell>
+                              <RatingStars
+                                rating={
+                                  review.rating
+                                }
+                              />
+                            </TableCell>
+
+
+                            <TableCell>
+                              <p className="max-w-[260px] truncate text-[#475467]">
+                                {
+                                  review.comment
+                                }
+                              </p>
+
+                              <p className="mt-1 text-[8px] text-[#98a2b3]">
+                                {
+                                  formatDate(
+                                    review.created_at,
+                                  )
+                                }
+                              </p>
+                            </TableCell>
+
+
+                            <TableCell>
+                              <p className="font-medium text-[#344054]">
+                                {
+                                  review.order_number ||
+                                  "—"
+                                }
+                              </p>
+                            </TableCell>
+
+
+                            <TableCell>
+                              <VisibilityBadge
+                                active={
+                                  review.is_active
+                                }
+                              />
+                            </TableCell>
+
+
+                            <TableCell>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedReview(
+                                    review,
+                                  )
+                                }
+                                className="h-8 rounded-[6px] border border-[#d0d5dd] px-3 text-[8px] font-semibold text-[#344054]"
+                              >
+                                Manage
+                              </button>
+                            </TableCell>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+
+            {!loading && (
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[9px] text-[#98a2b3]">
+                  Showing{" "}
+                  {
+                    pageReviews.length
+                  }{" "}
+                  of{" "}
+                  {
+                    filteredReviews.length
+                  }{" "}
+                  matching reviews ·{" "}
+                  {
+                    reviews.length
+                  }{" "}
+                  total
+                </p>
+
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={
+                      safePage <=
+                      1
+                    }
+                    onClick={() =>
+                      setCurrentPage(
+                        (
+                          page,
+                        ) =>
+                          Math.max(
+                            1,
+                            page -
+                              1,
+                          ),
+                      )
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+
+
+                  <span className="px-2 text-[9px] font-semibold text-[#475467]">
+                    {
+                      safePage
+                    }{" "}
+                    /{" "}
+                    {
+                      totalPages
+                    }
+                  </span>
+
+
+                  <button
+                    type="button"
+                    disabled={
+                      safePage >=
+                      totalPages
+                    }
+                    onClick={() =>
+                      setCurrentPage(
+                        (
+                          page,
+                        ) =>
+                          Math.min(
+                            totalPages,
+                            page +
+                              1,
+                          ),
+                      )
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white disabled:opacity-40"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+
+      {selectedReview && (
+        <ReviewDrawer
+          review={
+            selectedReview
+          }
+          updating={
+            updatingId ===
+            selectedReview.id
+          }
+          onClose={() =>
+            setSelectedReview(
+              null,
+            )
+          }
+          onVisibilityChange={
+            (
+              active,
+            ) =>
+              void changeVisibility(
+                selectedReview,
+                active,
+              )
+          }
+        />
+      )}
+    </main>
+  );
+}
+
+
+function ReviewDrawer({
+  review,
+  updating,
+  onClose,
+  onVisibilityChange,
+}: {
+  review:
+    AdminReview;
+
+  updating:
+    boolean;
+
+  onClose:
+    () => void;
+
+  onVisibilityChange:
+    (
+      active:
+        boolean,
+    ) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
+      <button
+        type="button"
+        aria-label="Close review drawer"
+        onClick={
+          onClose
+        }
+        className="absolute inset-0"
+      />
+
+
+      <aside className="relative z-10 h-full w-full max-w-[600px] overflow-y-auto bg-white">
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#eaecf0] bg-white px-6 py-5">
+          <div>
+            <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[#98a2b3]">
+              Review moderation
+            </p>
+
+            <h2 className="mt-1 text-[20px] font-bold">
+              Customer review
+            </h2>
+          </div>
+
+
+          <button
+            type="button"
+            disabled={
+              updating
+            }
+            onClick={
+              onClose
+            }
+            className="flex h-9 w-9 items-center justify-center rounded-[7px] border border-[#eaecf0]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+
+        <div className="space-y-6 p-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <RatingStars
+              rating={
+                review.rating
+              }
+            />
+
+            <VisibilityBadge
+              active={
+                review.is_active
+              }
+            />
+
+            {review.verified_purchase && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#abefc6] bg-[#ecfdf3] px-2.5 py-1 text-[8px] font-semibold text-[#067647]">
+                <BadgeCheck className="h-3 w-3" />
+
+                Verified purchase
+              </span>
+            )}
+          </div>
+
+
+          <Section
+            title="Review"
+          >
+            <div className="rounded-[8px] border border-[#e4e7ec] bg-[#fafbfc] p-4">
+              <p className="whitespace-pre-wrap text-[10px] leading-6 text-[#475467]">
+                {
+                  review.comment
+                }
+              </p>
+            </div>
+          </Section>
+
+
+          <Section
+            title="Customer"
+          >
+            <Detail
+              label="Name"
+              value={
+                review.customer_name
+              }
+            />
+
+            <Detail
+              label="Email"
+              value={
+                review.customer_email ||
+                "Not available"
+              }
+            />
+
+            <Detail
+              label="User ID"
+              value={
+                review.user_id
+              }
+            />
+          </Section>
+
+
+          <Section
+            title="Product"
+          >
+            <Detail
+              label="Product"
+              value={
+                review.product_name
+              }
+            />
+
+            <Detail
+              label="SKU"
+              value={
+                review.product_sku ||
+                "Not available"
+              }
+            />
+
+            <Detail
+              label="Product ID"
+              value={
+                review.product_id
+              }
+            />
+
+            {review.product_slug && (
+              <Link
+                href={`/product/${review.product_slug}`}
+                className="inline-flex items-center gap-1.5 text-[9px] font-semibold text-[#3448c5] hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+
+                Open storefront product
+              </Link>
+            )}
+          </Section>
+
+
+          <Section
+            title="Order"
+          >
+            <Detail
+              label="Order number"
+              value={
+                review.order_number ||
+                "Not available"
+              }
+            />
+
+            <Detail
+              label="Order ID"
+              value={
+                review.order_id
+              }
+            />
+
+            <Link
+              href="/admin/orders"
+              className="inline-flex items-center gap-1.5 text-[9px] font-semibold text-[#3448c5] hover:underline"
+            >
+              <ExternalLink className="h-3 w-3" />
+
+              Open Orders
+            </Link>
+          </Section>
+
+
+          <Section
+            title="Record"
+          >
+            <Detail
+              label="Review ID"
+              value={
+                review.id
+              }
+            />
+
+            <Detail
+              label="Created"
+              value={
+                formatDateTime(
+                  review.created_at,
+                )
+              }
+            />
+
+            <Detail
+              label="Last updated"
+              value={
+                formatDateTime(
+                  review.updated_at,
+                )
+              }
+            />
+          </Section>
+
+
+          <div
+            className={
+              review.is_active
+                ? "rounded-[8px] border border-[#fedf89] bg-[#fffaeb] p-4"
+                : "rounded-[8px] border border-[#b2ccff] bg-[#eff4ff] p-4"
+            }
+          >
+            <div className="flex gap-3">
+              {review.is_active ? (
+                <EyeOff className="mt-0.5 h-4 w-4 shrink-0 text-[#b54708]" />
+              ) : (
+                <Eye className="mt-0.5 h-4 w-4 shrink-0 text-[#3538cd]" />
+              )}
+
+              <div>
+                <p className="text-[9px] font-semibold">
+                  {
+                    review.is_active
+                      ? "Hide review"
+                      : "Restore review"
+                  }
+                </p>
+
+                <p className="mt-1 text-[8px] leading-4 text-[#667085]">
+                  {
+                    review.is_active
+                      ? "Hidden reviews are removed from the public product page and excluded from rating statistics."
+                      : "Restoring this review publishes it again and includes its rating in product statistics."
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        <div className="sticky bottom-0 flex justify-end gap-3 border-t border-[#eaecf0] bg-white px-6 py-4">
+          <button
+            type="button"
+            disabled={
+              updating
+            }
+            onClick={
+              onClose
+            }
+            className="h-10 rounded-[7px] border border-[#d0d5dd] px-4 text-[9px] font-semibold disabled:opacity-50"
+          >
+            Close
+          </button>
+
+
+          <button
+            type="button"
+            disabled={
+              updating
+            }
+            onClick={() =>
+              onVisibilityChange(
+                !review.is_active,
+              )
+            }
+            className={
+              review.is_active
+                ? "h-10 rounded-[7px] bg-[#e31b2d] px-5 text-[9px] font-semibold text-white disabled:opacity-50"
+                : "h-10 rounded-[7px] bg-[#071523] px-5 text-[9px] font-semibold text-white disabled:opacity-50"
+            }
+          >
+            {
+              updating
+                ? "Updating..."
+                : review.is_active
+                  ? "Hide review"
+                  : "Restore review"
+            }
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+
+function AdminSidebar() {
+  return (
+    <aside className="hidden w-[230px] shrink-0 bg-[#071523] text-white lg:flex lg:flex-col">
+      <div className="border-b border-white/10 px-6 py-6">
+        <Link
+          href="/admin"
+          className="flex items-center gap-3"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-[7px] bg-[#ef3d43] text-[18px] font-black italic">
+            V
+          </div>
+
+          <div>
+            <div className="text-[14px] font-bold">
+              VEHNEXA
+            </div>
+
+            <div className="text-[8px] font-semibold tracking-[0.18em] text-[#98a2b3]">
+              ADMIN CONSOLE
+            </div>
+          </div>
+        </Link>
+      </div>
+
+
+      <nav className="flex-1 space-y-1 px-3 py-5">
+        <Nav href="/admin" icon={LayoutDashboard} label="Overview" />
+        <Nav href="/admin/products" icon={Package} label="Products" />
+        <Nav href="/admin/categories" icon={Shapes} label="Categories" />
+        <Nav href="/admin/brands" icon={Tags} label="Brands" />
+        <Nav href="/admin/fitments" icon={CarFront} label="Fitments" />
+        <Nav href="/admin/orders" icon={ShoppingBag} label="Orders" />
+        <Nav href="/admin/users" icon={Users} label="Users" />
+        <Nav href="/admin/reviews" icon={Star} label="Reviews" active />
+        <Nav href="/admin/ai-sessions" icon={Bot} label="AI Sessions" />
+        <Nav href="/admin/notifications" icon={Bell} label="Notifications" />
+      </nav>
+    
+
+        <AdminLogoutButton />
+</aside>
+  );
+}
+
+
+function Nav({
+  href,
+  icon:
+    Icon,
+  label,
+  active =
+    false,
+}: {
+  href?:
+    string;
+
+  icon:
+    LucideIcon;
+
+  label:
+    string;
+
+  active?:
+    boolean;
+}) {
+  const className =
+    active
+      ? "flex h-10 items-center gap-3 rounded-[7px] bg-white/10 px-3 text-[9px] font-semibold text-white"
+      : "flex h-10 items-center gap-3 rounded-[7px] px-3 text-[9px] font-medium text-[#98a2b3] hover:bg-white/5 hover:text-white";
+
+
+  const content = (
+    <>
+      <Icon className="h-4 w-4" />
+
+      {
+        label
+      }
+    </>
+  );
+
+
+  return href ? (
+    <Link
+      href={
+        href
+      }
+      className={
+        className
+      }
+    >
+      {
+        content
+      }
+    </Link>
+  ) : (
+    <div
+      className={
+        className
+      }
+    >
+      {
+        content
+      }
+    </div>
+  );
+}
+
+
+function MetricCard({
+  label,
+  value,
+}: {
+  label:
+    string;
+
+  value:
+    number;
+}) {
+  return (
+    <div className="rounded-[12px] border border-[#dfe3e8] bg-white p-5">
+      <p className="text-[8px] font-semibold uppercase tracking-[0.1em] text-[#98a2b3]">
+        {
+          label
+        }
+      </p>
+
+      <p className="mt-2 text-[23px] font-bold">
+        {
+          value.toLocaleString()
+        }
+      </p>
+    </div>
+  );
+}
+
+
+function TableHeading({
+  children,
+}: {
+  children:
+    ReactNode;
+}) {
+  return (
+    <th className="px-5 py-3 text-[8px] font-semibold uppercase tracking-[0.1em] text-[#98a2b3]">
+      {
+        children
+      }
+    </th>
+  );
+}
+
+
+function TableCell({
+  children,
+}: {
+  children:
+    ReactNode;
+}) {
+  return (
+    <td className="px-5 py-4 text-[9px] text-[#475467]">
+      {
+        children
+      }
+    </td>
+  );
+}
+
+
+function RatingStars({
+  rating,
+}: {
+  rating:
+    number;
+}) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[
+        1,
+        2,
+        3,
+        4,
+        5,
+      ].map(
+        (
+          star,
+        ) => (
+          <Star
+            key={
+              star
+            }
+            className={
+              star <=
+              rating
+                ? "h-3.5 w-3.5 fill-[#f4b740] text-[#f4b740]"
+                : "h-3.5 w-3.5 text-[#d0d5dd]"
+            }
+          />
+        ),
+      )}
+    </div>
+  );
+}
+
+
+function VisibilityBadge({
+  active,
+}: {
+  active:
+    boolean;
+}) {
+  return (
+    <span
+      className={
+        active
+          ? "inline-flex items-center gap-1 rounded-full border border-[#abefc6] bg-[#ecfdf3] px-2.5 py-1 text-[8px] font-semibold text-[#067647]"
+          : "inline-flex items-center gap-1 rounded-full border border-[#d0d5dd] bg-[#f2f4f7] px-2.5 py-1 text-[8px] font-semibold text-[#667085]"
+      }
+    >
+      {
+        active
+          ? (
+            <>
+              <Eye className="h-3 w-3" />
+
+              Visible
+            </>
+          )
+          : (
+            <>
+              <EyeOff className="h-3 w-3" />
+
+              Hidden
+            </>
+          )
+      }
+    </span>
+  );
+}
+
+
+function Section({
+  title,
+  children,
+}: {
+  title:
+    string;
+
+  children:
+    ReactNode;
+}) {
+  return (
+    <section>
+      <h3 className="mb-3 text-[9px] font-semibold uppercase tracking-[0.1em] text-[#667085]">
+        {
+          title
+        }
+      </h3>
+
+      <div className="space-y-3">
+        {
+          children
+        }
+      </div>
+    </section>
+  );
+}
+
+
+function Detail({
+  label,
+  value,
+}: {
+  label:
+    string;
+
+  value:
+    string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-[#eaecf0] py-2 last:border-0">
+      <span className="text-[8px] font-semibold uppercase tracking-[0.08em] text-[#98a2b3]">
+        {
+          label
+        }
+      </span>
+
+      <span className="max-w-[330px] break-all text-right text-[9px] font-medium text-[#344054]">
+        {
+          value
+        }
+      </span>
+    </div>
+  );
+}
+
+
+function formatDate(
+  value:
+    string | null,
+) {
+  if (!value) {
+    return "—";
+  }
+
+
+  const date =
+    new Date(
+      value,
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "—";
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "2-digit",
+
+      year:
+        "numeric",
+    },
+  ).format(
+    date,
+  );
+}
+
+
+function formatDateTime(
+  value:
+    string | null,
+) {
+  if (!value) {
+    return "—";
+  }
+
+
+  const date =
+    new Date(
+      value,
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "—";
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "2-digit",
+
+      year:
+        "numeric",
+
+      hour:
+        "2-digit",
+
+      minute:
+        "2-digit",
+    },
+  ).format(
+    date,
+  );
+}

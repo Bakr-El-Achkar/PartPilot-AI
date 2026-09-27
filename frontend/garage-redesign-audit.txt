@@ -1,0 +1,2702 @@
+﻿
+
+============================================================
+FILE: .\app\account\garage\page.tsx
+============================================================
+
+"use client";
+
+import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
+
+import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import {
+  CarFront,
+  CheckCircle2,
+  Loader2,
+  MoreVertical,
+  PackageSearch,
+  Plus,
+  Search,
+  ShoppingCart,
+  Trash2,
+  UserRound,
+} from "lucide-react";
+
+import { ApiError } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
+
+import {
+  deleteVehicle,
+  getVehicles,
+  setActiveVehicle,
+} from "@/lib/vehicles";
+
+type GarageVehicle =
+  Awaited<ReturnType<typeof getVehicles>>[number];
+
+export default function GaragePage() {
+  const router = useRouter();
+
+  const [vehicles, setVehicles] =
+    useState<GarageVehicle[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  const [
+    busyVehicleId,
+    setBusyVehicleId,
+  ] = useState<string | null>(null);
+
+  const [
+    expandedVehicleId,
+    setExpandedVehicleId,
+  ] = useState<string | null>(null);
+
+  /*
+   * ==========================================================
+   * INITIAL LOAD
+   * ==========================================================
+   */
+
+  useEffect(() => {
+    const token = getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchVehicles(
+      accessToken: string,
+    ) {
+      try {
+        const result =
+          await getVehicles(
+            accessToken,
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        setVehicles(result);
+        setError("");
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          err instanceof ApiError &&
+          (err.status === 401 ||
+            err.status === 403)
+        ) {
+          router.replace("/login");
+          return;
+        }
+
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Unable to load your garage.",
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void fetchVehicles(token);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  /*
+   * ==========================================================
+   * RELOAD VEHICLES
+   * ==========================================================
+   */
+
+  async function reloadVehicles() {
+    const token =
+      getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const result =
+        await getVehicles(token);
+
+      setVehicles(result);
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.status === 401 ||
+          err.status === 403)
+      ) {
+        router.replace("/login");
+        return;
+      }
+
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to refresh your garage.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /*
+   * ==========================================================
+   * SET ACTIVE VEHICLE
+   * ==========================================================
+   */
+
+  async function handleSetActive(
+    vehicleId: string,
+  ) {
+    const token =
+      getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      setBusyVehicleId(
+        vehicleId,
+      );
+
+      setError("");
+
+      await setActiveVehicle(
+        token,
+        vehicleId,
+      );
+
+      const refreshed =
+        await getVehicles(token);
+
+      setVehicles(refreshed);
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.status === 401 ||
+          err.status === 403)
+      ) {
+        router.replace("/login");
+        return;
+      }
+
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to change the active vehicle.",
+      );
+    } finally {
+      setBusyVehicleId(null);
+    }
+  }
+
+  /*
+   * ==========================================================
+   * DELETE VEHICLE
+   * ==========================================================
+   */
+
+  async function handleDelete(
+    vehicleId: string,
+  ) {
+    const confirmed =
+      window.confirm(
+        "Remove this vehicle from your garage?",
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const token =
+      getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      setBusyVehicleId(
+        vehicleId,
+      );
+
+      setError("");
+
+      await deleteVehicle(
+        token,
+        vehicleId,
+      );
+
+      const refreshed =
+        await getVehicles(token);
+
+      setVehicles(refreshed);
+
+      if (
+        expandedVehicleId ===
+        vehicleId
+      ) {
+        setExpandedVehicleId(
+          null,
+        );
+      }
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.status === 401 ||
+          err.status === 403)
+      ) {
+        router.replace("/login");
+        return;
+      }
+
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to remove the vehicle.",
+      );
+    } finally {
+      setBusyVehicleId(null);
+    }
+  }
+
+  /*
+   * Show the active vehicle first.
+   */
+
+  const sortedVehicles = [
+    ...vehicles,
+  ].sort((a, b) => {
+    if (
+      a.is_active ===
+      b.is_active
+    ) {
+      return 0;
+    }
+
+    return a.is_active
+      ? -1
+      : 1;
+  });
+
+  const activeVehicle =
+    vehicles.find(
+      (vehicle) =>
+        vehicle.is_active,
+    ) ?? null;
+
+  return (
+    <main className="min-h-screen bg-[#f6f8fa] text-[#101828]">
+      <VehnexaNavbar />
+
+      <section className="mx-auto max-w-[1320px] px-4 pb-16 pt-7 sm:px-6 lg:px-8">
+        {/* ==================================================
+            PAGE HEADER
+        ================================================== */}
+
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
+          <div>
+            <h1 className="text-[30px] font-bold tracking-[-0.035em] text-[#101828]">
+              My Garage
+            </h1>
+
+            <p className="mt-1.5 text-[12px] text-[#667085]">
+              Manage your vehicles and
+              find compatible parts.
+            </p>
+          </div>
+
+          <Link
+            href="/account/garage/add"
+            className="flex h-10 w-fit items-center justify-center gap-2 rounded-[5px] bg-[#e31b2d] px-5 text-[12px] font-semibold text-white transition hover:bg-[#c81727]"
+          >
+            <Plus className="h-4 w-4" />
+
+            Add Vehicle
+          </Link>
+        </div>
+
+        {/* ==================================================
+            ERROR
+        ================================================== */}
+
+        {error && (
+          <div className="mt-6 flex items-center justify-between gap-4 rounded-md border border-[#f5c2c7] bg-[#fff5f6] px-4 py-3">
+            <p className="text-[12px] text-[#b42318]">
+              {error}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                void reloadVehicles();
+              }}
+              className="shrink-0 text-[11px] font-semibold text-[#e31b2d]"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {/* ==================================================
+            GARAGE
+        ================================================== */}
+
+        {loading ? (
+          <GarageLoading />
+        ) : vehicles.length === 0 ? (
+          <EmptyGarage />
+        ) : (
+          <>
+            {/* VEHICLES */}
+
+            <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {sortedVehicles.map(
+                (vehicle) => (
+                  <VehicleCard
+                    key={vehicle.id}
+                    vehicle={
+                      vehicle
+                    }
+                    busy={
+                      busyVehicleId ===
+                      vehicle.id
+                    }
+                    expanded={
+                      expandedVehicleId ===
+                      vehicle.id
+                    }
+                    onToggleDetails={() => {
+                      setExpandedVehicleId(
+                        (
+                          current,
+                        ) =>
+                          current ===
+                          vehicle.id
+                            ? null
+                            : vehicle.id,
+                      );
+                    }}
+                    onSetActive={
+                      handleSetActive
+                    }
+                    onDelete={
+                      handleDelete
+                    }
+                  />
+                ),
+              )}
+            </div>
+
+            {/* ==================================================
+                RECOMMENDATIONS
+            ================================================== */}
+
+            <section className="mt-8">
+              <div>
+                <h2 className="text-[18px] font-bold tracking-[-0.025em] text-[#101828]">
+                  Recommended for Your
+                  Vehicles
+                </h2>
+
+                <p className="mt-1 text-[12px] text-[#667085]">
+                  Parts that are
+                  compatible with your
+                  garage.
+                </p>
+              </div>
+
+              <RecommendationsState
+                activeVehicle={
+                  activeVehicle
+                }
+              />
+            </section>
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
+/* ==========================================================
+   VEHICLE CARD
+========================================================== */
+
+function VehicleCard({
+  vehicle,
+  busy,
+  expanded,
+  onToggleDetails,
+  onSetActive,
+  onDelete,
+}: {
+  vehicle: GarageVehicle;
+  busy: boolean;
+  expanded: boolean;
+  onToggleDetails: () => void;
+  onSetActive: (
+    vehicleId: string,
+  ) => Promise<void>;
+  onDelete: (
+    vehicleId: string,
+  ) => Promise<void>;
+}) {
+  const image =
+    getVehicleImage(vehicle);
+
+  const vehicleTitle =
+    `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
+
+  return (
+    <article className="relative overflow-visible rounded-[7px] border border-[#dfe3e8] bg-white">
+      {/* CARD HEADER */}
+
+      <div className="flex min-h-[68px] items-start justify-between px-4 pb-2 pt-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-[14px] font-bold text-[#101828]">
+              {vehicleTitle}
+            </h3>
+
+            {vehicle.is_active && (
+              <span className="rounded-full bg-[#e9f9ef] px-2 py-[3px] text-[8px] font-bold uppercase tracking-[0.06em] text-[#16804a]">
+                Active
+              </span>
+            )}
+          </div>
+
+          <p className="mt-1 truncate text-[10px] text-[#667085]">
+            {vehicle.engine}
+
+            {vehicle.nickname
+              ? ` ط¢آ· ${vehicle.nickname}`
+              : ""}
+          </p>
+        </div>
+
+        {/* OPTIONS */}
+
+        <div className="relative z-30">
+          <details className="group relative">
+            <summary className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-md text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#344054] [&::-webkit-details-marker]:hidden">
+              <MoreVertical className="h-4 w-4" />
+            </summary>
+
+            <div className="absolute right-0 top-8 z-50 w-36 overflow-hidden rounded-md border border-[#e4e7ec] bg-white py-1 shadow-[0_8px_24px_rgba(16,24,40,0.12)]">
+              {!vehicle.is_active && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void onSetActive(
+                      vehicle.id,
+                    );
+                  }}
+                  className="flex w-full items-center px-3 py-2 text-left text-[11px] text-[#344054] transition hover:bg-[#f8fafc] disabled:opacity-50"
+                >
+                  Make active
+                </button>
+              )}
+
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  void onDelete(
+                    vehicle.id,
+                  );
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-[#d92d20] transition hover:bg-[#fff5f5] disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+
+                Remove
+              </button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      {/* VEHICLE IMAGE */}
+
+      <div className="mx-4 flex h-[125px] items-center justify-center overflow-hidden bg-[#f7f8fa]">
+        {busy ? (
+          <Loader2 className="h-6 w-6 animate-spin text-[#e31b2d]" />
+        ) : image ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={image}
+              alt={vehicleTitle}
+              className="h-full w-full object-contain p-2"
+            />
+          </>
+        ) : (
+          <VehiclePlaceholder />
+        )}
+      </div>
+
+      {/* CARD ACTIONS */}
+
+      <div className="px-4 pb-4 pt-3">
+        <button
+          type="button"
+          onClick={
+            onToggleDetails
+          }
+          className="flex h-8 w-full items-center justify-center rounded-[4px] border border-[#d0d5dd] bg-white text-[10px] font-semibold text-[#344054] transition hover:bg-[#f8fafc]"
+        >
+          View Details
+        </button>
+
+        <Link
+          href={`/shop?vehicleId=${vehicle.id}&fits=true`}
+          className="mt-2 flex h-8 w-full items-center justify-center rounded-[4px] border border-[#6ba1ef] bg-white text-[10px] font-semibold text-[#2767c5] transition hover:bg-[#f5f9ff]"
+        >
+          Find Parts
+        </Link>
+
+        {/* EXPANDED DETAILS */}
+
+        {expanded && (
+          <div className="mt-3 border-t border-[#eaecf0] pt-3">
+            <DetailRow
+              label="Engine"
+              value={
+                vehicle.engine
+              }
+            />
+
+            <DetailRow
+              label="Transmission"
+              value={
+                vehicle.transmission
+              }
+            />
+
+            {vehicle.nickname && (
+              <DetailRow
+                label="Nickname"
+                value={
+                  vehicle.nickname
+                }
+              />
+            )}
+
+            <div className="mt-3">
+              {vehicle.is_active ? (
+                <div className="flex items-center gap-2 text-[10px] font-medium text-[#16804a]">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+
+                  Used for compatibility
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void onSetActive(
+                      vehicle.id,
+                    );
+                  }}
+                  className="text-[10px] font-semibold text-[#e31b2d] disabled:opacity-50"
+                >
+                  Make Active Vehicle
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/* ==========================================================
+   RECOMMENDATIONS
+
+   These are intentionally placeholders.
+   We are NOT inventing product names, prices,
+   stock or vehicle fitment.
+========================================================== */
+
+function RecommendationsState({
+  activeVehicle,
+}: {
+  activeVehicle: GarageVehicle | null;
+}) {
+  return (
+    <div className="mt-5">
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <RecommendationSkeletonCard />
+
+        <RecommendationSkeletonCard />
+
+        <RecommendationSkeletonCard />
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 rounded-[6px] border border-[#e4e7ec] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[10px] leading-5 text-[#667085]">
+          {activeVehicle
+            ? `Real compatible products for your ${activeVehicle.year} ${activeVehicle.make} ${activeVehicle.model} will populate these cards when the Shop catalog interface is connected.`
+            : "Choose an active vehicle to receive vehicle-specific compatible product recommendations."}
+        </p>
+
+        {activeVehicle && (
+          <Link
+            href={`/shop?vehicleId=${activeVehicle.id}&fits=true`}
+            className="flex h-8 shrink-0 items-center justify-center rounded-[4px] bg-[#e31b2d] px-4 text-[10px] font-semibold text-white transition hover:bg-[#c81727]"
+          >
+            Browse Compatible Parts
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
+   RECOMMENDATION SKELETON CARD
+========================================================== */
+
+function RecommendationSkeletonCard() {
+  return (
+    <article className="overflow-hidden rounded-[7px] border border-[#dfe3e8] bg-white">
+      <div className="flex h-[125px] items-center justify-center bg-[#f7f8fa]">
+        <PackageSearch className="h-8 w-8 text-[#c5ccd6]" />
+      </div>
+
+      <div className="p-4">
+        <div className="h-2.5 w-[45%] rounded-full bg-[#e9edf2]" />
+
+        <div className="mt-3 h-3 w-[72%] rounded-full bg-[#dfe4ea]" />
+
+        <div className="mt-2 h-2.5 w-[52%] rounded-full bg-[#eef1f4]" />
+
+        <div className="mt-5 flex items-center justify-between">
+          <div className="h-4 w-14 rounded bg-[#e9edf2]" />
+
+          <div className="h-7 w-20 rounded-[4px] bg-[#f0f2f5]" />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/* ==========================================================
+   EMPTY GARAGE
+========================================================== */
+
+function EmptyGarage() {
+  return (
+    <section className="mt-7 flex min-h-[300px] items-center justify-center rounded-[7px] border border-[#dfe3e8] bg-white px-6 py-10">
+      <div className="max-w-[430px] text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#f2f4f7]">
+          <CarFront className="h-6 w-6 text-[#98a2b3]" />
+        </div>
+
+        <h2 className="mt-5 text-[17px] font-bold text-[#101828]">
+          Your garage is empty
+        </h2>
+
+        <p className="mt-2 text-[11px] leading-5 text-[#667085]">
+          Add your first vehicle to
+          find compatible parts and
+          get vehicle-specific
+          recommendations.
+        </p>
+
+        <Link
+          href="/account/garage/add"
+          className="mx-auto mt-5 flex h-9 w-fit items-center justify-center gap-2 rounded-[4px] bg-[#e31b2d] px-5 text-[11px] font-semibold text-white"
+        >
+          <Plus className="h-3.5 w-3.5" />
+
+          Add Vehicle
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+/* ==========================================================
+   LOADING
+========================================================== */
+
+function GarageLoading() {
+  return (
+    <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      {[1, 2, 3].map(
+        (item) => (
+          <div
+            key={item}
+            className="h-[280px] animate-pulse rounded-[7px] border border-[#e4e7ec] bg-white"
+          >
+            <div className="mx-5 mt-5 h-4 w-1/2 rounded bg-[#eaecf0]" />
+
+            <div className="mx-4 mt-4 h-[125px] rounded bg-[#f2f4f7]" />
+
+            <div className="mx-4 mt-4 h-8 rounded bg-[#f2f4f7]" />
+
+            <div className="mx-4 mt-2 h-8 rounded bg-[#f2f4f7]" />
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
+   NAVBAR
+========================================================== */
+
+function VehnexaNavbar() {
+  return (
+    <header className="border-b border-[#163047] bg-[#071b2d]">
+      <div className="mx-auto flex h-[62px] max-w-[1320px] items-center px-4 sm:px-6 lg:px-8">
+        {/* BRAND */}
+
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2.5"
+        >
+          <VehnexaMark />
+
+          <span className="text-[14px] font-bold tracking-[-0.025em] text-white">
+            Vehnexa
+          </span>
+        </Link>
+
+        {/* NAVIGATION */}
+
+        <nav className="ml-9 hidden h-full items-center gap-7 lg:flex">
+          <TopNavLink
+            href="/shop"
+            label="Shop"
+          />
+
+          <TopNavLink
+            href="/account/garage"
+            label="My Garage"
+            active
+          />
+
+          <TopNavLink
+            href="/ai-mechanic"
+            label="AI Mechanic"
+          />
+
+          <TopNavLink
+            href="#resources"
+            label="Resources"
+          />
+        </nav>
+
+        {/* ACTIONS */}
+
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Search"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-[#c4ced7] transition hover:bg-white/5 hover:text-white"
+          >
+            <Search className="h-[16px] w-[16px]" />
+          </button>
+
+          <button
+            type="button"
+            aria-label="Shopping cart"
+            className="relative flex h-9 w-9 items-center justify-center rounded-md text-[#c4ced7] transition hover:bg-white/5 hover:text-white"
+          >
+            <ShoppingCart className="h-[16px] w-[16px]" />
+
+            <span className="absolute right-[7px] top-[7px] h-1.5 w-1.5 rounded-full bg-[#e31b2d]" />
+          </button>
+
+          <NavbarNotificationBell />
+
+          <Link
+            href="/account"
+            aria-label="Account"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-[#c4ced7] transition hover:bg-white/5 hover:text-white"
+          >
+            <UserRound className="h-[16px] w-[16px]" />
+          </Link>
+
+          <CustomerLogoutButton />
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ==========================================================
+   VEHNEXA MARK
+========================================================== */
+
+function VehnexaMark() {
+  return (
+    <div
+      aria-label="Vehnexa"
+      className="relative h-7 w-7 shrink-0"
+    >
+      <span className="absolute left-[1px] top-[3px] block h-[22px] w-[10px] -skew-x-[25deg] rounded-[2px] bg-[#e31b2d]" />
+
+      <span className="absolute right-[2px] top-[3px] block h-[22px] w-[10px] skew-x-[25deg] rounded-[2px] bg-[#d8dee5]" />
+    </div>
+  );
+}
+
+/* ==========================================================
+   TOP NAV LINK
+========================================================== */
+
+function TopNavLink({
+  href,
+  label,
+  active = false,
+}: {
+  href: string;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`relative flex h-full items-center text-[10px] font-medium transition ${
+        active
+          ? "text-white"
+          : "text-[#b9c5d0] hover:text-white"
+      }`}
+    >
+      {label}
+
+      {active && (
+        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#e31b2d]" />
+      )}
+    </Link>
+  );
+}
+
+/* ==========================================================
+   DETAIL ROW
+========================================================== */
+
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1">
+      <span className="text-[9px] text-[#98a2b3]">
+        {label}
+      </span>
+
+      <span className="truncate text-right text-[10px] font-semibold text-[#475467]">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/* ==========================================================
+   VEHICLE IMAGE
+========================================================== */
+
+function getVehicleImage(
+  vehicle: GarageVehicle,
+): string | null {
+  const candidate = (
+    vehicle as GarageVehicle & {
+      image_url?: unknown;
+    }
+  ).image_url;
+
+  if (
+    typeof candidate !==
+      "string" ||
+    !candidate.trim()
+  ) {
+    return null;
+  }
+
+  return candidate;
+}
+
+/* ==========================================================
+   VEHICLE PLACEHOLDER
+========================================================== */
+
+function VehiclePlaceholder() {
+  return (
+    <div className="flex h-full w-full items-center justify-center">
+      <svg
+        viewBox="0 0 240 120"
+        className="w-[65%] max-w-[175px] text-[#b6c0cc]"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M43 75H197L178 54L154 34H87L64 57L43 75Z"
+          stroke="currentColor"
+          strokeWidth="7"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M87 35L69 70M154 35L185 70"
+          stroke="currentColor"
+          strokeWidth="5"
+        />
+
+        <circle
+          cx="73"
+          cy="81"
+          r="23"
+          fill="#f7f8fa"
+          stroke="currentColor"
+          strokeWidth="7"
+        />
+
+        <circle
+          cx="171"
+          cy="81"
+          r="23"
+          fill="#f7f8fa"
+          stroke="currentColor"
+          strokeWidth="7"
+        />
+      </svg>
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\lib\vehicles.ts
+============================================================
+
+import { ApiError } from "@/lib/api";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+export type Vehicle = {
+  id: string;
+  user_id: string;
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string | null;
+  image_url?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type VehicleCreatePayload = {
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string;
+  image_url?: string;
+};
+
+
+export type VehiclePreview = {
+  found: boolean;
+  image_url: string | null;
+  thumbnail_url: string | null;
+  source_url: string | null;
+  message: string | null;
+};
+
+export type VehicleUpdatePayload = Partial<VehicleCreatePayload>;
+
+async function readResponse(response: Response) {
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType =
+    response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail:
+      text ||
+      "Unexpected response from PartPilot.",
+  };
+}
+
+function authHeaders(token: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+export async function getVehicles(
+  token: string,
+): Promise<Vehicle[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicles.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function getVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function createVehicle(
+  token: string,
+  payload: VehicleCreatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to add vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function updateVehicle(
+  token: string,
+  vehicleId: string,
+  payload: VehicleUpdatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to update vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function setActiveVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}/active`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to activate vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function deleteVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await readResponse(response);
+
+    throw new ApiError(
+      data?.detail ?? "Unable to delete vehicle.",
+      response.status,
+    );
+  }
+}
+
+
+
+export async function getVehiclePreview(
+  token: string,
+  year: number,
+  make: string,
+  model: string,
+): Promise<VehiclePreview> {
+  const params = new URLSearchParams({
+    year: String(year),
+    make,
+    model,
+  });
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/preview/image?${params.toString()}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to load vehicle preview.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+============================================================
+FILE: .\lib\auth.ts
+============================================================
+
+const TOKEN_KEY = "partpilot_access_token";
+
+export function saveAccessToken(token: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function removeAccessToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+export function isAuthenticated(): boolean {
+  return Boolean(getAccessToken());
+}
+
+============================================================
+FILE: .\lib\products.ts
+============================================================
+
+import { ApiError } from "@/lib/api";
+
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+
+/* ============================================================
+   PRODUCT TYPES
+============================================================ */
+
+export type Product = {
+  id: string;
+  name: string;
+  slug: string;
+  sku: string;
+  part_number: string;
+  brand_id: string;
+  category_id: string;
+  subcategory_slug: string;
+  description: string;
+  price: number;
+  sale_price: number | null;
+  stock_quantity: number;
+  images: string[];
+  specifications: Record<
+    string,
+    unknown
+  >;
+  warranty: string | null;
+  rating_average: number;
+  review_count: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+
+/* ============================================================
+   CATEGORY TYPES
+============================================================ */
+
+export type CategorySubcategory = {
+  name: string;
+  slug: string;
+  description?: string | null;
+};
+
+
+export type Category = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  subcategories: CategorySubcategory[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+
+/* ============================================================
+   BRAND TYPES
+============================================================ */
+
+export type Brand = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  country?: string | null;
+  website?: string | null;
+  logo_url?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+
+/* ============================================================
+   SORT
+============================================================ */
+
+export type ProductSort =
+  | "recommended"
+  | "price_asc"
+  | "price_desc"
+  | "rating"
+  | "newest";
+
+
+/* ============================================================
+   SHOP QUERY
+============================================================ */
+
+export type ProductQuery = {
+  search?: string;
+  category_id?: string;
+  brand_id?: string;
+  subcategory_slug?: string;
+  min_price?: number;
+  max_price?: number;
+  in_stock?: boolean;
+  sort?: ProductSort;
+};
+
+
+/* ============================================================
+   RESPONSE READER
+============================================================ */
+
+async function readResponse(
+  response: Response,
+) {
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType =
+    response.headers.get(
+      "content-type",
+    );
+
+  if (
+    contentType?.includes(
+      "application/json",
+    )
+  ) {
+    return response.json();
+  }
+
+  const text =
+    await response.text();
+
+  return {
+    detail:
+      text ||
+      "Unexpected server response.",
+  };
+}
+
+
+/* ============================================================
+   PUBLIC JSON REQUEST
+============================================================ */
+
+async function getPublicJson<T>(
+  url: string,
+  fallbackMessage: string,
+): Promise<T> {
+  const response = await fetch(
+    url,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    },
+  );
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        fallbackMessage,
+      response.status,
+    );
+  }
+
+  return data as T;
+}
+
+
+/* ============================================================
+   GET PRODUCTS
+============================================================ */
+
+export async function getProducts(
+  query: ProductQuery = {},
+): Promise<Product[]> {
+  const params =
+    new URLSearchParams();
+
+  if (
+    query.search &&
+    query.search.trim()
+  ) {
+    params.set(
+      "search",
+      query.search.trim(),
+    );
+  }
+
+  if (query.category_id) {
+    params.set(
+      "category_id",
+      query.category_id,
+    );
+  }
+
+  if (query.brand_id) {
+    params.set(
+      "brand_id",
+      query.brand_id,
+    );
+  }
+
+  if (query.subcategory_slug) {
+    params.set(
+      "subcategory_slug",
+      query.subcategory_slug,
+    );
+  }
+
+  if (
+    query.min_price !==
+    undefined
+  ) {
+    params.set(
+      "min_price",
+      String(
+        query.min_price,
+      ),
+    );
+  }
+
+  if (
+    query.max_price !==
+    undefined
+  ) {
+    params.set(
+      "max_price",
+      String(
+        query.max_price,
+      ),
+    );
+  }
+
+  if (
+    query.in_stock !==
+    undefined
+  ) {
+    params.set(
+      "in_stock",
+      String(
+        query.in_stock,
+      ),
+    );
+  }
+
+  if (query.sort) {
+    params.set(
+      "sort",
+      query.sort,
+    );
+  }
+
+  const queryString =
+    params.toString();
+
+  const url = queryString
+    ? `${API_BASE_URL}/api/products?${queryString}`
+    : `${API_BASE_URL}/api/products`;
+
+  return getPublicJson<Product[]>(
+    url,
+    "Unable to load products.",
+  );
+}
+
+
+/* ============================================================
+   GET CATEGORIES
+============================================================ */
+
+export async function getCategories(): Promise<
+  Category[]
+> {
+  return getPublicJson<
+    Category[]
+  >(
+    `${API_BASE_URL}/api/catalog/categories`,
+    "Unable to load categories.",
+  );
+}
+
+
+/* ============================================================
+   GET BRANDS
+============================================================ */
+
+export async function getBrands(): Promise<
+  Brand[]
+> {
+  return getPublicJson<
+    Brand[]
+  >(
+    `${API_BASE_URL}/api/catalog/brands`,
+    "Unable to load brands.",
+  );
+}
+
+
+/* ============================================================
+   GET COMPATIBLE PRODUCTS
+============================================================ */
+
+export async function getCompatibleProducts(
+  token: string,
+  vehicleId: string,
+): Promise<Product[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/fitments/compatible/${encodeURIComponent(
+      vehicleId,
+    )}`,
+    {
+      method: "GET",
+      headers: {
+        Accept:
+          "application/json",
+        Authorization:
+          `Bearer ${token}`,
+      },
+      cache: "no-store",
+    },
+  );
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to load compatible products.",
+      response.status,
+    );
+  }
+
+  return data as Product[];
+}
+
+
+/* ============================================================
+   EFFECTIVE PRODUCT PRICE
+============================================================ */
+
+export function getEffectivePrice(
+  product: Product,
+): number {
+  return (
+    product.sale_price ??
+    product.price
+  );
+}
+
+
+export async function getProductBySlug(
+  slug: string,
+): Promise<Product> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/products/slug/${encodeURIComponent(
+      slug,
+    )}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    },
+  );
+
+  const contentType =
+    response.headers.get(
+      "content-type",
+    );
+
+  let data: unknown;
+
+  if (
+    contentType?.includes(
+      "application/json",
+    )
+  ) {
+    data =
+      await response.json();
+  } else {
+    const text =
+      await response.text();
+
+    data = {
+      detail:
+        text ||
+        "Unexpected server response.",
+    };
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof data === "object" &&
+      data !== null &&
+      "detail" in data &&
+      typeof (
+        data as {
+          detail?: unknown;
+        }
+      ).detail === "string"
+        ? (
+            data as {
+              detail: string;
+            }
+          ).detail
+        : "Unable to load product.";
+
+    throw new ApiError(
+      message,
+      response.status,
+    );
+  }
+
+  return data as Product;
+}
+
+============================================================
+FILE: .\components\customer\PublicNavbarAuthActions.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  UserRound,
+} from "lucide-react";
+
+import {
+  ApiError,
+  getCurrentUser,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
+
+import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
+
+
+type SessionState =
+  | "checking"
+  | "guest"
+  | "customer"
+  | "hidden";
+
+
+export default function PublicNavbarAuthActions() {
+  const [
+    state,
+    setState,
+  ] =
+    useState<SessionState>(
+      "checking",
+    );
+
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+
+    const timer =
+      window.setTimeout(
+        () => {
+          async function load() {
+            const token =
+              getAccessToken();
+
+
+            if (!token) {
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+
+
+              return;
+            }
+
+
+            try {
+              const user =
+                await getCurrentUser(
+                  token,
+                );
+
+
+              if (
+                cancelled
+              ) {
+                return;
+              }
+
+
+              setState(
+                user.role ===
+                  "admin"
+                  ? "hidden"
+                  : "customer",
+              );
+
+            } catch (
+              error
+            ) {
+              if (
+                error instanceof
+                  ApiError &&
+                (
+                  error.status ===
+                    401 ||
+                  error.status ===
+                    403
+                )
+              ) {
+                removeAccessToken();
+              }
+
+
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+            }
+          }
+
+
+          void load();
+        },
+        0,
+      );
+
+
+    return () => {
+      cancelled =
+        true;
+
+      window.clearTimeout(
+        timer,
+      );
+    };
+  }, []);
+
+
+  if (
+    state ===
+      "checking" ||
+    state ===
+      "hidden"
+  ) {
+    return (
+      <div className="h-9 w-[120px]" />
+    );
+  }
+
+
+  if (
+    state ===
+    "guest"
+  ) {
+    return (
+      <div className="ml-2 flex items-center gap-2">
+        <Link
+          href="/login"
+          className="flex h-8 items-center justify-center rounded-[5px] px-3 text-[9px] font-semibold text-[#d0d9e2] transition hover:bg-white/[0.06] hover:text-white"
+        >
+          Login
+        </Link>
+
+        <Link
+          href="/register"
+          className="flex h-8 items-center justify-center rounded-[5px] bg-[#e31b2d] px-3.5 text-[9px] font-semibold text-white transition hover:bg-[#c91727]"
+        >
+          Create account
+        </Link>
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex items-center gap-1">
+      <NavbarNotificationBell />
+
+      <Link
+        href="/account"
+        aria-label="Account"
+        title="Account"
+        className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+      >
+        <UserRound className="h-[16px] w-[16px]" />
+      </Link>
+
+      <CustomerLogoutButton />
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\components\customer\CustomerLogoutButton.tsx
+============================================================
+
+"use client";
+
+import {
+  LogOut,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  removeAccessToken,
+} from "@/lib/auth";
+
+
+export default function CustomerLogoutButton() {
+  const router =
+    useRouter();
+
+
+  function logout() {
+    removeAccessToken();
+
+
+    router.replace(
+      "/login",
+    );
+
+
+    router.refresh();
+  }
+
+
+  return (
+    <button
+      type="button"
+      onClick={
+        logout
+      }
+      aria-label="Sign out"
+      title="Sign out"
+      className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+    >
+      <LogOut className="h-[16px] w-[16px]" />
+    </button>
+  );
+}
+
+
+============================================================
+FILE: .\components\notifications\NavbarNotificationBell.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Bell,
+  CheckCheck,
+  Megaphone,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type CustomerNotification,
+} from "@/lib/notifications";
+
+
+export default function NavbarNotificationBell() {
+  const router =
+    useRouter();
+
+
+  const containerRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    );
+
+
+  const [
+    notifications,
+    setNotifications,
+  ] =
+    useState<CustomerNotification[]>(
+      [],
+    );
+
+
+  const [
+    open,
+    setOpen,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const loadNotifications =
+    useCallback(
+      async () => {
+        const token =
+          getAccessToken();
+
+
+        if (!token) {
+          setNotifications(
+            [],
+          );
+
+          return;
+        }
+
+
+        try {
+          setLoading(
+            true,
+          );
+
+
+          const result =
+            await getNotifications(
+              token,
+            );
+
+
+          setNotifications(
+            result,
+          );
+
+          setError(
+            "",
+          );
+
+        } catch (
+          loadError
+        ) {
+          if (
+            loadError instanceof
+              ApiError &&
+            (
+              loadError.status ===
+                401 ||
+              loadError.status ===
+                403
+            )
+          ) {
+            removeAccessToken();
+
+            setNotifications(
+              [],
+            );
+
+            return;
+          }
+
+
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load notifications.",
+          );
+
+        } finally {
+          setLoading(
+            false,
+          );
+        }
+      },
+      [],
+    );
+
+
+  useEffect(() => {
+    const timeout =
+      window.setTimeout(
+        () => {
+          void loadNotifications();
+        },
+        0,
+      );
+
+
+    return () => {
+      window.clearTimeout(
+        timeout,
+      );
+    };
+  }, [
+    loadNotifications,
+  ]);
+
+
+  useEffect(() => {
+    function handleOutsideClick(
+      event:
+        MouseEvent,
+    ) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(
+          event.target as Node,
+        )
+      ) {
+        setOpen(
+          false,
+        );
+      }
+    }
+
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick,
+    );
+
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick,
+      );
+    };
+  }, []);
+
+
+  const unreadCount =
+    notifications.filter(
+      (
+        notification,
+      ) =>
+        !notification.is_read,
+    ).length;
+
+
+  async function toggleDropdown() {
+    const nextOpen =
+      !open;
+
+
+    setOpen(
+      nextOpen,
+    );
+
+
+    if (
+      nextOpen
+    ) {
+      await loadNotifications();
+    }
+  }
+
+
+  async function markAllRead() {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    try {
+      await markAllNotificationsRead(
+        token,
+      );
+
+
+      const now =
+        new Date()
+          .toISOString();
+
+
+      setNotifications(
+        (
+          current,
+        ) =>
+          current.map(
+            (
+              notification,
+            ) => ({
+              ...notification,
+
+              is_read:
+                true,
+
+              read_at:
+                notification.read_at ??
+                now,
+            }),
+          ),
+      );
+
+
+      setError(
+        "",
+      );
+
+    } catch (
+      readError
+    ) {
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notifications.",
+      );
+    }
+  }
+
+
+  async function openNotification(
+    notification:
+      CustomerNotification,
+  ) {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    let current =
+      notification;
+
+
+    try {
+      if (
+        !notification.is_read
+      ) {
+        current =
+          await markNotificationRead(
+            token,
+            notification.id,
+          );
+
+
+        setNotifications(
+          (
+            items,
+          ) =>
+            items.map(
+              (
+                item,
+              ) =>
+                item.id ===
+                current.id
+                  ? current
+                  : item,
+            ),
+        );
+      }
+
+
+      setOpen(
+        false,
+      );
+
+
+      if (
+        current.link &&
+        current.link.startsWith(
+          "/",
+        )
+      ) {
+        router.push(
+          current.link,
+        );
+      }
+
+    } catch (
+      readError
+    ) {
+      if (
+        readError instanceof
+          ApiError &&
+        readError.status ===
+          401
+      ) {
+        removeAccessToken();
+
+        return;
+      }
+
+
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notification.",
+      );
+    }
+  }
+
+
+  return (
+    <div
+      ref={
+        containerRef
+      }
+      className="relative"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          void toggleDropdown();
+        }}
+        aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#071523] text-white ring-1 ring-white/10 transition hover:bg-[#10293f]"
+      >
+        <Bell className="h-[17px] w-[17px]" />
+
+
+        {unreadCount >
+          0 && (
+          <span className="absolute right-0 top-0 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[8px] font-bold leading-none text-white">
+            {
+              unreadCount >
+              99
+                ? "99+"
+                : unreadCount
+            }
+          </span>
+        )}
+      </button>
+
+
+      {open && (
+        <div className="absolute right-0 top-[44px] z-[100] w-[360px] max-w-[calc(100vw-32px)] overflow-hidden rounded-[10px] border border-[#dfe3e8] bg-white text-[#101828] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
+          <div className="flex items-start justify-between border-b border-[#eaecf0] px-4 py-4">
+            <div>
+              <h2 className="text-[12px] font-bold">
+                Notifications
+              </h2>
+
+              <p className="mt-1 text-[8px] text-[#667085]">
+                {
+                  unreadCount
+                }{" "}
+                unread
+              </p>
+            </div>
+
+
+            <div className="flex items-center gap-1">
+              {unreadCount >
+                0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void markAllRead();
+                  }}
+                  className="flex h-8 items-center gap-1.5 rounded-[6px] px-2 text-[8px] font-semibold text-[#475467] hover:bg-[#f2f4f7]"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+
+                  Read all
+                </button>
+              )}
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  setOpen(
+                    false,
+                  )
+                }
+                aria-label="Close notifications"
+                className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#667085] hover:bg-[#f2f4f7]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+
+          {error && (
+            <div className="border-b border-[#fecdca] bg-[#fff4f5] px-4 py-3 text-[8px] text-[#b42318]">
+              {
+                error
+              }
+            </div>
+          )}
+
+
+          <div className="max-h-[380px] overflow-y-auto">
+            {loading &&
+            notifications.length ===
+              0 ? (
+              <div className="space-y-2 p-4">
+                {[
+                  1,
+                  2,
+                  3,
+                ].map(
+                  (
+                    item,
+                  ) => (
+                    <div
+                      key={
+                        item
+                      }
+                      className="h-[72px] animate-pulse rounded-[7px] bg-[#f2f4f7]"
+                    />
+                  ),
+                )}
+              </div>
+            ) : notifications.length ===
+              0 ? (
+              <div className="px-5 py-10 text-center">
+                <Bell className="mx-auto h-7 w-7 text-[#b8c0ca]" />
+
+                <p className="mt-3 text-[10px] font-semibold">
+                  No notifications
+                </p>
+
+                <p className="mt-1 text-[8px] text-[#98a2b3]">
+                  You&apos;re all caught up.
+                </p>
+              </div>
+            ) : (
+              notifications
+                .slice(
+                  0,
+                  6,
+                )
+                .map(
+                  (
+                    notification,
+                  ) => (
+                    <button
+                      key={
+                        notification.id
+                      }
+                      type="button"
+                      onClick={() => {
+                        void openNotification(
+                          notification,
+                        );
+                      }}
+                      className={
+                        notification.is_read
+                          ? "flex w-full gap-3 border-b border-[#f0f2f5] px-4 py-4 text-left last:border-0 hover:bg-[#fafbfc]"
+                          : "flex w-full gap-3 border-b border-[#f0f2f5] bg-[#fffafb] px-4 py-4 text-left last:border-0 hover:bg-[#fff5f6]"
+                      }
+                    >
+                      <NotificationCategoryIcon
+                        notification={
+                          notification
+                        }
+                      />
+
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="truncate text-[9px] font-bold">
+                            {
+                              notification.title
+                            }
+                          </p>
+
+
+                          {!notification.is_read && (
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#e31b2d]" />
+                          )}
+                        </div>
+
+
+                        <p className="mt-1 line-clamp-2 text-[8px] leading-4 text-[#667085]">
+                          {
+                            notification.message
+                          }
+                        </p>
+
+
+                        <p className="mt-2 text-[7px] text-[#98a2b3]">
+                          {
+                            formatDate(
+                              notification.created_at,
+                            )
+                          }
+                        </p>
+                      </div>
+                    </button>
+                  ),
+                )
+            )}
+          </div>
+
+
+          <div className="border-t border-[#eaecf0] bg-[#fafbfc] p-3">
+            <Link
+              href="/account/notifications"
+              onClick={() =>
+                setOpen(
+                  false,
+                )
+              }
+              className="flex h-9 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white text-[8px] font-semibold text-[#344054]"
+            >
+              View all notifications
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function NotificationCategoryIcon({
+  notification,
+}: {
+  notification:
+    CustomerNotification;
+}) {
+  if (
+    notification.category ===
+    "promotion"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#fff1f3] text-[#c01048]">
+        <Megaphone className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  if (
+    notification.category ===
+    "account"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#eff4ff] text-[#3538cd]">
+        <ShieldCheck className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#f2f4f7] text-[#475467]">
+      <Bell className="h-3.5 w-3.5" />
+    </div>
+  );
+}
+
+
+function formatDate(
+  value: string,
+) {
+  const date =
+    new Date(
+      value,
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "";
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "numeric",
+
+      hour:
+        "numeric",
+
+      minute:
+        "2-digit",
+    },
+  ).format(
+    date,
+  );
+}
+
+
+============================================================
+FILE: .\package.json
+============================================================
+
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.8.0",
+    "framer-motion": "^13.2.0",
+    "lucide-react": "^1.45.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+

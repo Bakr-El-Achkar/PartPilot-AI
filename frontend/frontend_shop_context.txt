@@ -1,0 +1,1779 @@
+================ LIB FILES =================
+
+Name             
+----             
+api.ts           
+auth.ts          
+vehicleCatalog.ts
+vehicles.ts      
+
+
+
+
+================ API =================
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+export type RegisterPayload = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  password: string;
+};
+
+export type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+export type UserPublic = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string | null;
+  role: string;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+};
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+async function readResponse(response: Response) {
+  const contentType = response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail: text || "Unexpected server response.",
+  };
+}
+
+export async function registerUser(
+  payload: RegisterPayload,
+): Promise<UserPublic> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to create account.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function loginUser(
+  payload: LoginPayload,
+): Promise<TokenResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to sign in.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function getCurrentUser(
+  token: string,
+): Promise<UserPublic> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load your account.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+================ AUTH =================
+const TOKEN_KEY = "partpilot_access_token";
+
+export function saveAccessToken(token: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function removeAccessToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+export function isAuthenticated(): boolean {
+  return Boolean(getAccessToken());
+}
+
+================ VEHICLES =================
+import { ApiError } from "@/lib/api";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+export type Vehicle = {
+  id: string;
+  user_id: string;
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string | null;
+  image_url?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type VehicleCreatePayload = {
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string;
+  image_url?: string;
+};
+
+
+export type VehiclePreview = {
+  found: boolean;
+  image_url: string | null;
+  thumbnail_url: string | null;
+  source_url: string | null;
+  message: string | null;
+};
+
+export type VehicleUpdatePayload = Partial<VehicleCreatePayload>;
+
+async function readResponse(response: Response) {
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType =
+    response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail:
+      text ||
+      "Unexpected response from PartPilot.",
+  };
+}
+
+function authHeaders(token: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+export async function getVehicles(
+  token: string,
+): Promise<Vehicle[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicles.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function getVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function createVehicle(
+  token: string,
+  payload: VehicleCreatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to add vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function updateVehicle(
+  token: string,
+  vehicleId: string,
+  payload: VehicleUpdatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to update vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function setActiveVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}/active`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to activate vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function deleteVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await readResponse(response);
+
+    throw new ApiError(
+      data?.detail ?? "Unable to delete vehicle.",
+      response.status,
+    );
+  }
+}
+
+
+
+export async function getVehiclePreview(
+  token: string,
+  year: number,
+  make: string,
+  model: string,
+): Promise<VehiclePreview> {
+  const params = new URLSearchParams({
+    year: String(year),
+    make,
+    model,
+  });
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/preview/image?${params.toString()}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to load vehicle preview.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+================ VEHICLE CATALOG =================
+import { ApiError } from "@/lib/api";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+export type VehicleCatalogOptions = {
+  make: string;
+  model: string;
+  year: number;
+  engines: string[];
+  transmissions: string[];
+};
+
+async function readResponse(response: Response) {
+  const contentType =
+    response.headers.get("content-type");
+
+  if (
+    contentType?.includes(
+      "application/json",
+    )
+  ) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail:
+      text ||
+      "Unexpected server response.",
+  };
+}
+
+async function getJson<T>(
+  url: string,
+  fallbackMessage: string,
+): Promise<T> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+
+  const data =
+    await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? fallbackMessage,
+      response.status,
+    );
+  }
+
+  return data as T;
+}
+
+export async function getVehicleMakes(): Promise<
+  string[]
+> {
+  return getJson<string[]>(
+    `${API_BASE_URL}/api/vehicle-catalog/makes`,
+    "Unable to load vehicle makes.",
+  );
+}
+
+export async function getVehicleModels(
+  make: string,
+): Promise<string[]> {
+  const params = new URLSearchParams({
+    make,
+  });
+
+  return getJson<string[]>(
+    `${API_BASE_URL}/api/vehicle-catalog/models?${params.toString()}`,
+    "Unable to load vehicle models.",
+  );
+}
+
+export async function getVehicleYears(
+  make: string,
+  model: string,
+): Promise<number[]> {
+  const params = new URLSearchParams({
+    make,
+    model,
+  });
+
+  return getJson<number[]>(
+    `${API_BASE_URL}/api/vehicle-catalog/years?${params.toString()}`,
+    "Unable to load vehicle years.",
+  );
+}
+
+export async function getVehicleOptions(
+  make: string,
+  model: string,
+  year: number,
+): Promise<VehicleCatalogOptions> {
+  const params = new URLSearchParams({
+    make,
+    model,
+    year: String(year),
+  });
+
+  return getJson<VehicleCatalogOptions>(
+    `${API_BASE_URL}/api/vehicle-catalog/options?${params.toString()}`,
+    "Unable to load vehicle options.",
+  );
+}
+
+================ CURRENT SHOP PAGE =================
+MISSING
+
+================ GARAGE PAGE =================
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import {
+  CarFront,
+  CheckCircle2,
+  Loader2,
+  MoreVertical,
+  PackageSearch,
+  Plus,
+  Search,
+  ShoppingCart,
+  Trash2,
+  UserRound,
+} from "lucide-react";
+
+import { ApiError } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
+
+import {
+  deleteVehicle,
+  getVehicles,
+  setActiveVehicle,
+} from "@/lib/vehicles";
+
+type GarageVehicle =
+  Awaited<ReturnType<typeof getVehicles>>[number];
+
+export default function GaragePage() {
+  const router = useRouter();
+
+  const [vehicles, setVehicles] =
+    useState<GarageVehicle[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  const [
+    busyVehicleId,
+    setBusyVehicleId,
+  ] = useState<string | null>(null);
+
+  const [
+    expandedVehicleId,
+    setExpandedVehicleId,
+  ] = useState<string | null>(null);
+
+  /*
+   * ==========================================================
+   * INITIAL LOAD
+   * ==========================================================
+   */
+
+  useEffect(() => {
+    const token = getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchVehicles(
+      accessToken: string,
+    ) {
+      try {
+        const result =
+          await getVehicles(
+            accessToken,
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        setVehicles(result);
+        setError("");
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          err instanceof ApiError &&
+          (err.status === 401 ||
+            err.status === 403)
+        ) {
+          router.replace("/login");
+          return;
+        }
+
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Unable to load your garage.",
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void fetchVehicles(token);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  /*
+   * ==========================================================
+   * RELOAD VEHICLES
+   * ==========================================================
+   */
+
+  async function reloadVehicles() {
+    const token =
+      getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const result =
+        await getVehicles(token);
+
+      setVehicles(result);
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.status === 401 ||
+          err.status === 403)
+      ) {
+        router.replace("/login");
+        return;
+      }
+
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to refresh your garage.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /*
+   * ==========================================================
+   * SET ACTIVE VEHICLE
+   * ==========================================================
+   */
+
+  async function handleSetActive(
+    vehicleId: string,
+  ) {
+    const token =
+      getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      setBusyVehicleId(
+        vehicleId,
+      );
+
+      setError("");
+
+      await setActiveVehicle(
+        token,
+        vehicleId,
+      );
+
+      const refreshed =
+        await getVehicles(token);
+
+      setVehicles(refreshed);
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.status === 401 ||
+          err.status === 403)
+      ) {
+        router.replace("/login");
+        return;
+      }
+
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to change the active vehicle.",
+      );
+    } finally {
+      setBusyVehicleId(null);
+    }
+  }
+
+  /*
+   * ==========================================================
+   * DELETE VEHICLE
+   * ==========================================================
+   */
+
+  async function handleDelete(
+    vehicleId: string,
+  ) {
+    const confirmed =
+      window.confirm(
+        "Remove this vehicle from your garage?",
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const token =
+      getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      setBusyVehicleId(
+        vehicleId,
+      );
+
+      setError("");
+
+      await deleteVehicle(
+        token,
+        vehicleId,
+      );
+
+      const refreshed =
+        await getVehicles(token);
+
+      setVehicles(refreshed);
+
+      if (
+        expandedVehicleId ===
+        vehicleId
+      ) {
+        setExpandedVehicleId(
+          null,
+        );
+      }
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.status === 401 ||
+          err.status === 403)
+      ) {
+        router.replace("/login");
+        return;
+      }
+
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to remove the vehicle.",
+      );
+    } finally {
+      setBusyVehicleId(null);
+    }
+  }
+
+  /*
+   * Show the active vehicle first.
+   */
+
+  const sortedVehicles = [
+    ...vehicles,
+  ].sort((a, b) => {
+    if (
+      a.is_active ===
+      b.is_active
+    ) {
+      return 0;
+    }
+
+    return a.is_active
+      ? -1
+      : 1;
+  });
+
+  const activeVehicle =
+    vehicles.find(
+      (vehicle) =>
+        vehicle.is_active,
+    ) ?? null;
+
+  return (
+    <main className="min-h-screen bg-[#f6f8fa] text-[#101828]">
+      <VehnexaNavbar />
+
+      <section className="mx-auto max-w-[1320px] px-4 pb-16 pt-7 sm:px-6 lg:px-8">
+        {/* ==================================================
+            PAGE HEADER
+        ================================================== */}
+
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
+          <div>
+            <h1 className="text-[30px] font-bold tracking-[-0.035em] text-[#101828]">
+              My Garage
+            </h1>
+
+            <p className="mt-1.5 text-[12px] text-[#667085]">
+              Manage your vehicles and
+              find compatible parts.
+            </p>
+          </div>
+
+          <Link
+            href="/account/garage/add"
+            className="flex h-10 w-fit items-center justify-center gap-2 rounded-[5px] bg-[#e31b2d] px-5 text-[12px] font-semibold text-white transition hover:bg-[#c81727]"
+          >
+            <Plus className="h-4 w-4" />
+
+            Add Vehicle
+          </Link>
+        </div>
+
+        {/* ==================================================
+            ERROR
+        ================================================== */}
+
+        {error && (
+          <div className="mt-6 flex items-center justify-between gap-4 rounded-md border border-[#f5c2c7] bg-[#fff5f6] px-4 py-3">
+            <p className="text-[12px] text-[#b42318]">
+              {error}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                void reloadVehicles();
+              }}
+              className="shrink-0 text-[11px] font-semibold text-[#e31b2d]"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {/* ==================================================
+            GARAGE
+        ================================================== */}
+
+        {loading ? (
+          <GarageLoading />
+        ) : vehicles.length === 0 ? (
+          <EmptyGarage />
+        ) : (
+          <>
+            {/* VEHICLES */}
+
+            <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {sortedVehicles.map(
+                (vehicle) => (
+                  <VehicleCard
+                    key={vehicle.id}
+                    vehicle={
+                      vehicle
+                    }
+                    busy={
+                      busyVehicleId ===
+                      vehicle.id
+                    }
+                    expanded={
+                      expandedVehicleId ===
+                      vehicle.id
+                    }
+                    onToggleDetails={() => {
+                      setExpandedVehicleId(
+                        (
+                          current,
+                        ) =>
+                          current ===
+                          vehicle.id
+                            ? null
+                            : vehicle.id,
+                      );
+                    }}
+                    onSetActive={
+                      handleSetActive
+                    }
+                    onDelete={
+                      handleDelete
+                    }
+                  />
+                ),
+              )}
+            </div>
+
+            {/* ==================================================
+                RECOMMENDATIONS
+            ================================================== */}
+
+            <section className="mt-8">
+              <div>
+                <h2 className="text-[18px] font-bold tracking-[-0.025em] text-[#101828]">
+                  Recommended for Your
+                  Vehicles
+                </h2>
+
+                <p className="mt-1 text-[12px] text-[#667085]">
+                  Parts that are
+                  compatible with your
+                  garage.
+                </p>
+              </div>
+
+              <RecommendationsState
+                activeVehicle={
+                  activeVehicle
+                }
+              />
+            </section>
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
+/* ==========================================================
+   VEHICLE CARD
+========================================================== */
+
+function VehicleCard({
+  vehicle,
+  busy,
+  expanded,
+  onToggleDetails,
+  onSetActive,
+  onDelete,
+}: {
+  vehicle: GarageVehicle;
+  busy: boolean;
+  expanded: boolean;
+  onToggleDetails: () => void;
+  onSetActive: (
+    vehicleId: string,
+  ) => Promise<void>;
+  onDelete: (
+    vehicleId: string,
+  ) => Promise<void>;
+}) {
+  const image =
+    getVehicleImage(vehicle);
+
+  const vehicleTitle =
+    `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
+
+  return (
+    <article className="relative overflow-visible rounded-[7px] border border-[#dfe3e8] bg-white">
+      {/* CARD HEADER */}
+
+      <div className="flex min-h-[68px] items-start justify-between px-4 pb-2 pt-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-[14px] font-bold text-[#101828]">
+              {vehicleTitle}
+            </h3>
+
+            {vehicle.is_active && (
+              <span className="rounded-full bg-[#e9f9ef] px-2 py-[3px] text-[8px] font-bold uppercase tracking-[0.06em] text-[#16804a]">
+                Active
+              </span>
+            )}
+          </div>
+
+          <p className="mt-1 truncate text-[10px] text-[#667085]">
+            {vehicle.engine}
+
+            {vehicle.nickname
+              ? ` · ${vehicle.nickname}`
+              : ""}
+          </p>
+        </div>
+
+        {/* OPTIONS */}
+
+        <div className="relative z-30">
+          <details className="group relative">
+            <summary className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-md text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#344054] [&::-webkit-details-marker]:hidden">
+              <MoreVertical className="h-4 w-4" />
+            </summary>
+
+            <div className="absolute right-0 top-8 z-50 w-36 overflow-hidden rounded-md border border-[#e4e7ec] bg-white py-1 shadow-[0_8px_24px_rgba(16,24,40,0.12)]">
+              {!vehicle.is_active && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void onSetActive(
+                      vehicle.id,
+                    );
+                  }}
+                  className="flex w-full items-center px-3 py-2 text-left text-[11px] text-[#344054] transition hover:bg-[#f8fafc] disabled:opacity-50"
+                >
+                  Make active
+                </button>
+              )}
+
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  void onDelete(
+                    vehicle.id,
+                  );
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-[#d92d20] transition hover:bg-[#fff5f5] disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+
+                Remove
+              </button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      {/* VEHICLE IMAGE */}
+
+      <div className="mx-4 flex h-[125px] items-center justify-center overflow-hidden bg-[#f7f8fa]">
+        {busy ? (
+          <Loader2 className="h-6 w-6 animate-spin text-[#e31b2d]" />
+        ) : image ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={image}
+              alt={vehicleTitle}
+              className="h-full w-full object-contain p-2"
+            />
+          </>
+        ) : (
+          <VehiclePlaceholder />
+        )}
+      </div>
+
+      {/* CARD ACTIONS */}
+
+      <div className="px-4 pb-4 pt-3">
+        <button
+          type="button"
+          onClick={
+            onToggleDetails
+          }
+          className="flex h-8 w-full items-center justify-center rounded-[4px] border border-[#d0d5dd] bg-white text-[10px] font-semibold text-[#344054] transition hover:bg-[#f8fafc]"
+        >
+          View Details
+        </button>
+
+        <Link
+          href={`/shop?vehicleId=${vehicle.id}`}
+          className="mt-2 flex h-8 w-full items-center justify-center rounded-[4px] border border-[#6ba1ef] bg-white text-[10px] font-semibold text-[#2767c5] transition hover:bg-[#f5f9ff]"
+        >
+          Find Parts
+        </Link>
+
+        {/* EXPANDED DETAILS */}
+
+        {expanded && (
+          <div className="mt-3 border-t border-[#eaecf0] pt-3">
+            <DetailRow
+              label="Engine"
+              value={
+                vehicle.engine
+              }
+            />
+
+            <DetailRow
+              label="Transmission"
+              value={
+                vehicle.transmission
+              }
+            />
+
+            {vehicle.nickname && (
+              <DetailRow
+                label="Nickname"
+                value={
+                  vehicle.nickname
+                }
+              />
+            )}
+
+            <div className="mt-3">
+              {vehicle.is_active ? (
+                <div className="flex items-center gap-2 text-[10px] font-medium text-[#16804a]">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+
+                  Used for compatibility
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void onSetActive(
+                      vehicle.id,
+                    );
+                  }}
+                  className="text-[10px] font-semibold text-[#e31b2d] disabled:opacity-50"
+                >
+                  Make Active Vehicle
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/* ==========================================================
+   RECOMMENDATIONS
+
+   These are intentionally placeholders.
+   We are NOT inventing product names, prices,
+   stock or vehicle fitment.
+========================================================== */
+
+function RecommendationsState({
+  activeVehicle,
+}: {
+  activeVehicle: GarageVehicle | null;
+}) {
+  return (
+    <div className="mt-5">
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <RecommendationSkeletonCard />
+
+        <RecommendationSkeletonCard />
+
+        <RecommendationSkeletonCard />
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 rounded-[6px] border border-[#e4e7ec] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[10px] leading-5 text-[#667085]">
+          {activeVehicle
+            ? `Real compatible products for your ${activeVehicle.year} ${activeVehicle.make} ${activeVehicle.model} will populate these cards when the Shop catalog interface is connected.`
+            : "Choose an active vehicle to receive vehicle-specific compatible product recommendations."}
+        </p>
+
+        {activeVehicle && (
+          <Link
+            href={`/shop?vehicleId=${activeVehicle.id}`}
+            className="flex h-8 shrink-0 items-center justify-center rounded-[4px] bg-[#e31b2d] px-4 text-[10px] font-semibold text-white transition hover:bg-[#c81727]"
+          >
+            Browse Compatible Parts
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
+   RECOMMENDATION SKELETON CARD
+========================================================== */
+
+function RecommendationSkeletonCard() {
+  return (
+    <article className="overflow-hidden rounded-[7px] border border-[#dfe3e8] bg-white">
+      <div className="flex h-[125px] items-center justify-center bg-[#f7f8fa]">
+        <PackageSearch className="h-8 w-8 text-[#c5ccd6]" />
+      </div>
+
+      <div className="p-4">
+        <div className="h-2.5 w-[45%] rounded-full bg-[#e9edf2]" />
+
+        <div className="mt-3 h-3 w-[72%] rounded-full bg-[#dfe4ea]" />
+
+        <div className="mt-2 h-2.5 w-[52%] rounded-full bg-[#eef1f4]" />
+
+        <div className="mt-5 flex items-center justify-between">
+          <div className="h-4 w-14 rounded bg-[#e9edf2]" />
+
+          <div className="h-7 w-20 rounded-[4px] bg-[#f0f2f5]" />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/* ==========================================================
+   EMPTY GARAGE
+========================================================== */
+
+function EmptyGarage() {
+  return (
+    <section className="mt-7 flex min-h-[300px] items-center justify-center rounded-[7px] border border-[#dfe3e8] bg-white px-6 py-10">
+      <div className="max-w-[430px] text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#f2f4f7]">
+          <CarFront className="h-6 w-6 text-[#98a2b3]" />
+        </div>
+
+        <h2 className="mt-5 text-[17px] font-bold text-[#101828]">
+          Your garage is empty
+        </h2>
+
+        <p className="mt-2 text-[11px] leading-5 text-[#667085]">
+          Add your first vehicle to
+          find compatible parts and
+          get vehicle-specific
+          recommendations.
+        </p>
+
+        <Link
+          href="/account/garage/add"
+          className="mx-auto mt-5 flex h-9 w-fit items-center justify-center gap-2 rounded-[4px] bg-[#e31b2d] px-5 text-[11px] font-semibold text-white"
+        >
+          <Plus className="h-3.5 w-3.5" />
+
+          Add Vehicle
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+/* ==========================================================
+   LOADING
+========================================================== */
+
+function GarageLoading() {
+  return (
+    <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      {[1, 2, 3].map(
+        (item) => (
+          <div
+            key={item}
+            className="h-[280px] animate-pulse rounded-[7px] border border-[#e4e7ec] bg-white"
+          >
+            <div className="mx-5 mt-5 h-4 w-1/2 rounded bg-[#eaecf0]" />
+
+            <div className="mx-4 mt-4 h-[125px] rounded bg-[#f2f4f7]" />
+
+            <div className="mx-4 mt-4 h-8 rounded bg-[#f2f4f7]" />
+
+            <div className="mx-4 mt-2 h-8 rounded bg-[#f2f4f7]" />
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================
+   NAVBAR
+========================================================== */
+
+function VehnexaNavbar() {
+  return (
+    <header className="border-b border-[#163047] bg-[#071b2d]">
+      <div className="mx-auto flex h-[62px] max-w-[1320px] items-center px-4 sm:px-6 lg:px-8">
+        {/* BRAND */}
+
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2.5"
+        >
+          <VehnexaMark />
+
+          <span className="text-[14px] font-bold tracking-[-0.025em] text-white">
+            Vehnexa
+          </span>
+        </Link>
+
+        {/* NAVIGATION */}
+
+        <nav className="ml-9 hidden h-full items-center gap-7 lg:flex">
+          <TopNavLink
+            href="/shop"
+            label="Shop"
+          />
+
+          <TopNavLink
+            href="/account/garage"
+            label="My Garage"
+            active
+          />
+
+          <TopNavLink
+            href="/ai-mechanic"
+            label="AI Mechanic"
+          />
+
+          <TopNavLink
+            href="#resources"
+            label="Resources"
+          />
+        </nav>
+
+        {/* ACTIONS */}
+
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Search"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-[#c4ced7] transition hover:bg-white/5 hover:text-white"
+          >
+            <Search className="h-[16px] w-[16px]" />
+          </button>
+
+          <button
+            type="button"
+            aria-label="Shopping cart"
+            className="relative flex h-9 w-9 items-center justify-center rounded-md text-[#c4ced7] transition hover:bg-white/5 hover:text-white"
+          >
+            <ShoppingCart className="h-[16px] w-[16px]" />
+
+            <span className="absolute right-[7px] top-[7px] h-1.5 w-1.5 rounded-full bg-[#e31b2d]" />
+          </button>
+
+          <Link
+            href="/account"
+            aria-label="Account"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-[#c4ced7] transition hover:bg-white/5 hover:text-white"
+          >
+            <UserRound className="h-[16px] w-[16px]" />
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ==========================================================
+   VEHNEXA MARK
+========================================================== */
+
+function VehnexaMark() {
+  return (
+    <div
+      aria-label="Vehnexa"
+      className="relative h-7 w-7 shrink-0"
+    >
+      <span className="absolute left-[1px] top-[3px] block h-[22px] w-[10px] -skew-x-[25deg] rounded-[2px] bg-[#e31b2d]" />
+
+      <span className="absolute right-[2px] top-[3px] block h-[22px] w-[10px] skew-x-[25deg] rounded-[2px] bg-[#d8dee5]" />
+    </div>
+  );
+}
+
+/* ==========================================================
+   TOP NAV LINK
+========================================================== */
+
+function TopNavLink({
+  href,
+  label,
+  active = false,
+}: {
+  href: string;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`relative flex h-full items-center text-[10px] font-medium transition ${
+        active
+          ? "text-white"
+          : "text-[#b9c5d0] hover:text-white"
+      }`}
+    >
+      {label}
+
+      {active && (
+        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#e31b2d]" />
+      )}
+    </Link>
+  );
+}
+
+/* ==========================================================
+   DETAIL ROW
+========================================================== */
+
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1">
+      <span className="text-[9px] text-[#98a2b3]">
+        {label}
+      </span>
+
+      <span className="truncate text-right text-[10px] font-semibold text-[#475467]">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/* ==========================================================
+   VEHICLE IMAGE
+========================================================== */
+
+function getVehicleImage(
+  vehicle: GarageVehicle,
+): string | null {
+  const candidate = (
+    vehicle as GarageVehicle & {
+      image_url?: unknown;
+    }
+  ).image_url;
+
+  if (
+    typeof candidate !==
+      "string" ||
+    !candidate.trim()
+  ) {
+    return null;
+  }
+
+  return candidate;
+}
+
+/* ==========================================================
+   VEHICLE PLACEHOLDER
+========================================================== */
+
+function VehiclePlaceholder() {
+  return (
+    <div className="flex h-full w-full items-center justify-center">
+      <svg
+        viewBox="0 0 240 120"
+        className="w-[65%] max-w-[175px] text-[#b6c0cc]"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M43 75H197L178 54L154 34H87L64 57L43 75Z"
+          stroke="currentColor"
+          strokeWidth="7"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M87 35L69 70M154 35L185 70"
+          stroke="currentColor"
+          strokeWidth="5"
+        />
+
+        <circle
+          cx="73"
+          cy="81"
+          r="23"
+          fill="#f7f8fa"
+          stroke="currentColor"
+          strokeWidth="7"
+        />
+
+        <circle
+          cx="171"
+          cy="81"
+          r="23"
+          fill="#f7f8fa"
+          stroke="currentColor"
+          strokeWidth="7"
+        />
+      </svg>
+    </div>
+  );
+}
+
+================ APP DIRECTORIES =================
+
+Name    
+----    
+account 
+login   
+register
+
+
+
+
+================ PRODUCT/CART FRONTEND FILES =================
+
+
+================ BACKEND CATALOG ROUTES =================
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+)
+
+from app.dependencies.auth import (
+    get_current_user,
+)
+from app.schemas.catalog import (
+    BrandCreate,
+    BrandPublic,
+    CategoryCreate,
+    CategoryPublic,
+)
+from app.services.catalog_service import (
+    CatalogAlreadyExistsError,
+    brand_service,
+    category_service,
+)
+
+
+router = APIRouter(
+    prefix="/api/catalog",
+    tags=["Catalog"],
+)
+
+
+def require_admin(
+    current_user: dict,
+) -> None:
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+
+@router.get(
+    "/categories",
+    response_model=list[CategoryPublic],
+)
+def list_categories():
+    return category_service.list_categories()
+
+
+@router.post(
+    "/categories",
+    response_model=CategoryPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_category(
+    category: CategoryCreate,
+    current_user: dict = Depends(
+        get_current_user
+    ),
+):
+    require_admin(current_user)
+
+    try:
+        return (
+            category_service.create_category(
+                category
+            )
+        )
+
+    except CatalogAlreadyExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/brands",
+    response_model=list[BrandPublic],
+)
+def list_brands():
+    return brand_service.list_brands()
+
+
+@router.post(
+    "/brands",
+    response_model=BrandPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_brand(
+    brand: BrandCreate,
+    current_user: dict = Depends(
+        get_current_user
+    ),
+):
+    require_admin(current_user)
+
+    try:
+        return brand_service.create_brand(
+            brand
+        )
+
+    except CatalogAlreadyExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+================ BACKEND FITMENT ROUTES =================
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+)
+
+from app.dependencies.auth import (
+    get_current_user,
+)
+from app.schemas.catalog import (
+    ProductPublic,
+)
+from app.schemas.fitment import (
+    FitmentCreate,
+    FitmentPublic,
+)
+from app.services.fitment_service import (
+    FitmentAlreadyExistsError,
+    FitmentReferenceError,
+    FitmentVehicleNotFoundError,
+    fitment_service,
+)
+
+
+router = APIRouter(
+    prefix="/api/fitments",
+    tags=["Fitments"],
+)
+
+
+def require_admin(
+    current_user: dict,
+) -> None:
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=(
+                status.HTTP_403_FORBIDDEN
+            ),
+            detail="Admin access required",
+        )
+
+
+@router.get(
+    "/product/{product_id}",
+    response_model=list[FitmentPublic],
+)
+def list_product_fitments(
+    product_id: str,
+):
+    return (
+        fitment_service
+        .list_product_fitments(
+            product_id
+        )
+    )
+
+
+@router.get(
+    "/compatible/{vehicle_id}",
+    response_model=list[ProductPublic],
+)
+def get_compatible_products(
+    vehicle_id: str,
+    current_user: dict = Depends(
+        get_current_user
+    ),
+):
+    user_id = str(
+        current_user["_id"]
+    )
+
+    try:
+        return (
+            fitment_service
+            .get_compatible_products(
+                vehicle_id=vehicle_id,
+                user_id=user_id,
+            )
+        )
+
+    except FitmentVehicleNotFoundError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "",
+    response_model=FitmentPublic,
+    status_code=(
+        status.HTTP_201_CREATED
+    ),
+)
+def create_fitment(
+    fitment: FitmentCreate,
+    current_user: dict = Depends(
+        get_current_user
+    ),
+):
+    require_admin(
+        current_user
+    )
+
+    try:
+        return (
+            fitment_service
+            .create_fitment(
+                fitment
+            )
+        )
+
+    except FitmentAlreadyExistsError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=str(exc),
+        ) from exc
+
+    except FitmentReferenceError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(exc),
+        ) from exc

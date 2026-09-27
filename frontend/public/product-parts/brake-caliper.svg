@@ -1,0 +1,60 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+  <rect width="1000" height="700" fill="#ffffff"/>
+
+  <g transform="translate(165 120)">
+    <path
+      d="M165 120
+         C220 65 330 40 450 70
+         C555 95 630 170 650 265
+         L625 360
+         C605 430 535 470 465 455
+         L330 425
+         C280 415 250 380 235 340
+         L135 340
+         C90 340 65 315 65 270
+         L65 195
+         C65 145 100 120 165 120 Z"
+      fill="#555c62"
+      stroke="#252a2f"
+      stroke-width="16"
+    />
+
+    <path
+      d="M300 140
+         C355 115 450 120 505 160
+         C550 195 575 245 570 300
+         L500 290
+         C495 245 460 215 410 210
+         C355 205 310 230 290 275
+         L215 260
+         C220 205 245 165 300 140 Z"
+      fill="#858c92"
+    />
+
+    <circle
+      cx="160"
+      cy="225"
+      r="37"
+      fill="#252a2f"
+    />
+
+    <circle
+      cx="550"
+      cy="372"
+      r="28"
+      fill="#252a2f"
+    />
+  </g>
+
+  <text
+    x="500"
+    y="620"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+    font-size="28"
+    font-weight="700"
+    fill="#667085"
+  >
+    BRAKE CALIPER
+  </text>
+</svg>

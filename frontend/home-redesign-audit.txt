@@ -1,0 +1,1835 @@
+﻿
+
+============================================================
+FILE: .\app\page.tsx
+============================================================
+
+"use client";
+
+import PublicNavbarAuthActions from "@/components/customer/PublicNavbarAuthActions";
+
+import Link from "next/link";
+import {
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
+
+import {
+  Bot,
+  CarFront,
+  Circle,
+  Cog,
+  Filter,
+  Package,
+  Search,
+  ShoppingCart,
+  UserRound,
+  Wrench,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
+
+import {
+  getCategories,
+  type Category,
+} from "@/lib/products";
+
+import {
+  CART_UPDATED_EVENT,
+  getCartCount,
+} from "@/lib/cart";
+
+
+/* ============================================================
+   HOME CATEGORY SHORTCUTS
+============================================================ */
+
+type HomeCategoryDefinition = {
+  label: string;
+  search: string;
+  icon: LucideIcon;
+};
+
+
+const HOME_CATEGORIES: HomeCategoryDefinition[] = [
+  {
+    label: "Brake System",
+    search: "brake",
+    icon: Circle,
+  },
+  {
+    label: "Filters",
+    search: "filter",
+    icon: Filter,
+  },
+  {
+    label: "Engine Parts",
+    search: "engine",
+    icon: Cog,
+  },
+  {
+    label: "Suspension",
+    search: "suspension",
+    icon: Wrench,
+  },
+  {
+    label: "Electrical",
+    search: "electrical",
+    icon: Zap,
+  },
+  {
+    label: "Body & Exterior",
+    search: "body",
+    icon: CarFront,
+  },
+];
+
+
+/* ============================================================
+   PAGE
+============================================================ */
+
+export default function HomePage() {
+  const router =
+    useRouter();
+
+
+  const [
+    search,
+    setSearch,
+  ] =
+    useState("");
+
+
+  const [
+    categories,
+    setCategories,
+  ] =
+    useState<Category[]>([]);
+
+
+  const [
+    cartCount,
+    setCartCount,
+  ] =
+    useState(0);
+
+
+  /* ==========================================================
+     CART
+  ========================================================== */
+
+  useEffect(() => {
+    const updateCartCount =
+      () => {
+        setCartCount(
+          getCartCount(),
+        );
+      };
+
+
+    updateCartCount();
+
+
+    window.addEventListener(
+      CART_UPDATED_EVENT,
+      updateCartCount,
+    );
+
+
+    return () => {
+      window.removeEventListener(
+        CART_UPDATED_EVENT,
+        updateCartCount,
+      );
+    };
+  }, []);
+
+
+  /* ==========================================================
+     CATEGORIES
+
+     Load real backend category IDs when possible.
+     Home still works if catalog metadata is unavailable.
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+
+    async function loadCategories() {
+      try {
+        const result =
+          await getCategories();
+
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+
+        setCategories(
+          result,
+        );
+      } catch {
+        if (
+          !cancelled
+        ) {
+          setCategories(
+            [],
+          );
+        }
+      }
+    }
+
+
+    void loadCategories();
+
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, []);
+
+
+  /* ==========================================================
+     CATEGORY ROUTES
+  ========================================================== */
+
+  const categoryLinks =
+    useMemo(() => {
+      return HOME_CATEGORIES.map(
+        (
+          shortcut,
+        ) => {
+          const searchValue =
+            shortcut.search
+              .toLowerCase();
+
+
+          const category =
+            categories.find(
+              (
+                candidate,
+              ) => {
+                const name =
+                  candidate.name
+                    .toLowerCase();
+
+                const slug =
+                  candidate.slug
+                    .toLowerCase();
+
+
+                return (
+                  name.includes(
+                    searchValue,
+                  ) ||
+                  slug.includes(
+                    searchValue,
+                  )
+                );
+              },
+            );
+
+
+          return {
+            ...shortcut,
+
+            href:
+              category
+                ? `/shop?category_id=${encodeURIComponent(
+                    category.id,
+                  )}`
+                : `/shop?search=${encodeURIComponent(
+                    shortcut.search,
+                  )}`,
+          };
+        },
+      );
+    }, [
+      categories,
+    ]);
+
+
+  /* ==========================================================
+     SEARCH
+  ========================================================== */
+
+  function submitSearch(
+    event:
+      FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+
+    const value =
+      search.trim();
+
+
+    router.push(
+      value
+        ? `/shop?search=${encodeURIComponent(
+            value,
+          )}`
+        : "/shop",
+    );
+  }
+
+
+  function focusHeroSearch() {
+    document
+      .getElementById(
+        "home-part-search",
+      )
+      ?.focus();
+  }
+
+
+  /* ==========================================================
+     RENDER
+  ========================================================== */
+
+  return (
+    <main className="min-h-screen bg-[#f4f6f8] text-[#0f1720]">
+      <HomeNavbar
+        cartCount={
+          cartCount
+        }
+        onSearch={
+          focusHeroSearch
+        }
+      />
+
+
+      <div className="mx-auto max-w-[1320px] px-4 pb-14 pt-5 sm:px-6 lg:px-8">
+        {/* ====================================================
+            HERO
+        ==================================================== */}
+
+        <section className="overflow-hidden rounded-[8px] border border-[#263d50] bg-[#081a2a] shadow-[0_3px_10px_rgba(15,23,42,0.08)]">
+          <div
+            className="relative min-h-[405px] overflow-hidden bg-[#071827] sm:min-h-[440px] lg:min-h-[455px]"
+            style={{
+              backgroundImage:
+                'linear-gradient(90deg, rgba(4,18,31,.98) 0%, rgba(4,18,31,.92) 29%, rgba(4,18,31,.70) 50%, rgba(4,18,31,.22) 76%, rgba(4,18,31,.08) 100%), linear-gradient(0deg, rgba(3,15,26,.34), rgba(3,15,26,.05)), url("/images/partpilot-hero-car.jpg")',
+
+              backgroundSize:
+                "cover",
+
+              backgroundPosition:
+                "center 58%",
+            }}
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_87%_38%,rgba(227,27,45,.11),transparent_29%)]" />
+
+
+            <div className="relative z-10 flex min-h-[405px] items-center px-6 py-12 sm:min-h-[440px] sm:px-9 lg:min-h-[455px] lg:px-12">
+              <div className="w-full max-w-[625px]">
+                <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-[#f3414f]">
+                  Keep your journey going
+                </p>
+
+
+                <h1 className="mt-4 text-[39px] font-extrabold leading-[0.98] tracking-[-0.04em] text-white sm:text-[48px] lg:text-[54px]">
+                  Quality Parts.
+                  <br />
+
+                  Smarter Solutions.
+                </h1>
+
+
+                <p className="mt-5 max-w-[560px] text-[12px] leading-[1.7] text-[#d1d8df] sm:text-[13px]">
+                  Shop top brands, manage your vehicles,
+                  <br className="hidden sm:block" />
+
+                  and get AI-powered diagnostics â€” all in one place.
+                </p>
+
+
+                <form
+                  onSubmit={
+                    submitSearch
+                  }
+                  className="mt-7 flex w-full max-w-[570px] overflow-hidden rounded-[5px] border border-white/20 bg-white shadow-[0_8px_24px_rgba(0,0,0,.25)]"
+                >
+                  <input
+                    id="home-part-search"
+                    type="search"
+                    value={
+                      search
+                    }
+                    onChange={(
+                      event,
+                    ) => {
+                      setSearch(
+                        event.target.value,
+                      );
+                    }}
+                    placeholder="Search for parts, brands, or your problem..."
+                    className="h-[50px] min-w-0 flex-1 bg-white px-4 text-[11px] text-[#344054] outline-none placeholder:text-[#98a2b3]"
+                  />
+
+
+                  <button
+                    type="submit"
+                    aria-label="Search parts"
+                    className="flex h-[50px] w-[58px] shrink-0 items-center justify-center bg-[#e31b2d] text-white transition hover:bg-[#c91625]"
+                  >
+                    <Search className="h-[19px] w-[19px]" />
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+
+          {/* ==================================================
+              BENEFIT STRIP
+          ================================================== */}
+
+          <div
+            id="resources"
+            className="grid border-t border-[#1c3448] bg-[#071b2d] sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <FeatureItem
+              icon={
+                Wrench
+              }
+              title="Genuine & Aftermarket"
+              secondLine="Parts"
+            />
+
+
+            <FeatureItem
+              icon={
+                Bot
+              }
+              title="AI-Powered"
+              secondLine="Diagnosis"
+            />
+
+
+            <FeatureItem
+              icon={
+                CarFront
+              }
+              title="Manage"
+              secondLine="Your Vehicles"
+            />
+
+
+            <FeatureItem
+              icon={
+                Package
+              }
+              title="Fast & Reliable"
+              secondLine="Delivery"
+            />
+          </div>
+        </section>
+
+
+        {/* ====================================================
+            CATEGORIES
+        ==================================================== */}
+
+        <section className="pt-7">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <h2 className="text-[18px] font-extrabold tracking-[-0.025em] text-[#101828] sm:text-[20px]">
+              Shop by Category
+            </h2>
+
+
+            <Link
+              href="/shop"
+              className="text-[10px] font-bold text-[#e31b2d] transition hover:text-[#bd1422]"
+            >
+              View all â†’
+            </Link>
+          </div>
+
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {categoryLinks.map(
+              (
+                category,
+              ) => {
+                const Icon =
+                  category.icon;
+
+
+                return (
+                  <Link
+                    key={
+                      category.label
+                    }
+                    href={
+                      category.href
+                    }
+                    className="group flex min-h-[115px] flex-col items-center justify-center rounded-[7px] border border-[#dbe1e7] bg-white px-3 py-4 text-center transition hover:-translate-y-[1px] hover:border-[#c9d1d9] hover:shadow-[0_4px_12px_rgba(15,23,42,.06)]"
+                  >
+                    <span className="flex h-[50px] w-[50px] items-center justify-center rounded-full bg-[#f0f3f6] text-[#536171] transition group-hover:bg-[#fff0f1] group-hover:text-[#e31b2d]">
+                      <Icon className="h-[24px] w-[24px]" />
+                    </span>
+
+
+                    <span className="mt-3 text-[10px] font-bold text-[#202b37]">
+                      {
+                        category.label
+                      }
+                    </span>
+                  </Link>
+                );
+              },
+            )}
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+
+/* ============================================================
+   NAVBAR
+============================================================ */
+
+function HomeNavbar({
+  cartCount,
+  onSearch,
+}: {
+  cartCount:
+    number;
+
+  onSearch:
+    () =>
+      void;
+}) {
+  return (
+    <header className="border-b border-[#142d41] bg-[#071b2d]">
+      <div className="mx-auto flex h-[62px] max-w-[1320px] items-center px-4 sm:px-6 lg:px-8">
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2"
+          aria-label="Vehnexa home"
+        >
+          <VehnexaLogo />
+
+
+          <span className="text-[13px] font-extrabold tracking-[-0.025em] text-white">
+            Vehnexa
+          </span>
+        </Link>
+
+
+        <nav className="ml-9 hidden h-full items-center gap-7 lg:flex">
+          <TopNavLink
+            href="/shop"
+            label="Shop"
+          />
+
+
+          <TopNavLink
+            href="/account/garage"
+            label="My Garage"
+          />
+
+
+          <TopNavLink
+            href="/ai-mechanic"
+            label="AI Mechanic"
+          />
+
+
+          <TopNavLink
+            href="#resources"
+            label="Resources"
+          />
+        </nav>
+
+
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={
+              onSearch
+            }
+            aria-label="Search parts"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#cfdae4] transition hover:bg-white/[0.06] hover:text-white"
+          >
+            <Search className="h-[15px] w-[15px]" />
+          </button>
+
+
+          <Link
+            href="/cart"
+            aria-label={`Cart with ${cartCount} items`}
+            className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#cfdae4] transition hover:bg-white/[0.06] hover:text-white"
+          >
+            <ShoppingCart className="h-[15px] w-[15px]" />
+
+
+            {cartCount >
+              0 && (
+              <span className="absolute right-[2px] top-[1px] flex min-h-[14px] min-w-[14px] items-center justify-center rounded-full bg-[#e31b2d] px-[3px] text-[7px] font-extrabold leading-none text-white">
+                {cartCount >
+                99
+                  ? "99+"
+                  : cartCount}
+              </span>
+            )}
+          </Link>
+
+
+          <PublicNavbarAuthActions />
+        </div>
+      </div>
+    </header>
+  );
+}
+
+
+/* ============================================================
+   NAV LINK
+============================================================ */
+
+function TopNavLink({
+  href,
+  label,
+}: {
+  href:
+    string;
+
+  label:
+    string;
+}) {
+  return (
+    <Link
+      href={
+        href
+      }
+      className="flex h-full items-center text-[9px] font-medium text-[#c0ccd6] transition hover:text-white"
+    >
+      {
+        label
+      }
+    </Link>
+  );
+}
+
+
+/* ============================================================
+   FEATURE STRIP ITEM
+============================================================ */
+
+function FeatureItem({
+  icon:
+    Icon,
+  title,
+  secondLine,
+}: {
+  icon:
+    LucideIcon;
+
+  title:
+    string;
+
+  secondLine:
+    string;
+}) {
+  return (
+    <div className="flex min-h-[82px] items-center justify-center gap-3 border-[#163247] px-4 py-4 sm:[&:nth-child(odd)]:border-r lg:border-r lg:last:border-r-0">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#354c60] bg-[#0d2639] text-[#ed3343]">
+        <Icon className="h-[15px] w-[15px]" />
+      </span>
+
+
+      <div className="text-left">
+        <p className="text-[8px] font-bold leading-[1.35] text-[#f2f5f7]">
+          {
+            title
+          }
+        </p>
+
+
+        <p className="text-[8px] font-bold leading-[1.35] text-[#f2f5f7]">
+          {
+            secondLine
+          }
+        </p>
+      </div>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   VEH NEXA MARK
+============================================================ */
+
+function VehnexaLogo() {
+  return (
+    <div
+      className="relative h-[25px] w-[30px] shrink-0"
+      aria-hidden="true"
+    >
+      <span
+        className="absolute left-0 top-[2px] h-[18px] w-[12px] bg-[#f03a45]"
+        style={{
+          clipPath:
+            "polygon(0 0, 100% 0, 66% 100%, 42% 100%)",
+          transform:
+            "skewX(7deg)",
+        }}
+      />
+
+
+      <span
+        className="absolute left-[8px] top-[5px] h-[18px] w-[13px] bg-[#f08c2e]"
+        style={{
+          clipPath:
+            "polygon(0 0, 100% 0, 52% 100%, 30% 100%)",
+          transform:
+            "skewX(-4deg)",
+        }}
+      />
+
+
+      <span
+        className="absolute right-0 top-[2px] h-[20px] w-[16px] bg-[#d9e1e8]"
+        style={{
+          clipPath:
+            "polygon(12% 0, 100% 0, 53% 100%, 0 100%)",
+          transform:
+            "skewX(-7deg)",
+        }}
+      />
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\app\globals.css
+============================================================
+
+@import "tailwindcss";
+
+:root {
+  --background: #070707;
+  --foreground: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(
+      circle at 70% 10%,
+      rgba(220, 38, 38, 0.05),
+      transparent 25%
+    ),
+    #070707;
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+::selection {
+  background: #dc2626;
+  color: white;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080808;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 100px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #dc2626;
+}
+
+
+/* PartPilot browser autofill styling */
+.partpilot-input:-webkit-autofill,
+.partpilot-input:-webkit-autofill:hover,
+.partpilot-input:-webkit-autofill:focus,
+.partpilot-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #202124 !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  caret-color: #202124;
+  transition: background-color 9999s ease-out 0s;
+}
+
+.partpilot-input:focus {
+  background-color: #ffffff;
+}
+
+============================================================
+FILE: .\app\layout.tsx
+============================================================
+
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+import RoleAccessGuard from "@/components/auth/RoleAccessGuard";
+
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full flex flex-col">
+        <RoleAccessGuard>
+          {children}
+        </RoleAccessGuard>
+
+      </body>
+    </html>
+  );
+}
+
+
+============================================================
+FILE: .\package.json
+============================================================
+
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.8.0",
+    "framer-motion": "^13.2.0",
+    "lucide-react": "^1.45.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+
+============================================================
+FILE: .\components\customer\PublicNavbarAuthActions.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  UserRound,
+} from "lucide-react";
+
+import {
+  ApiError,
+  getCurrentUser,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
+
+import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
+
+
+type SessionState =
+  | "checking"
+  | "guest"
+  | "customer"
+  | "hidden";
+
+
+export default function PublicNavbarAuthActions() {
+  const [
+    state,
+    setState,
+  ] =
+    useState<SessionState>(
+      "checking",
+    );
+
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+
+    const timer =
+      window.setTimeout(
+        () => {
+          async function load() {
+            const token =
+              getAccessToken();
+
+
+            if (!token) {
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+
+
+              return;
+            }
+
+
+            try {
+              const user =
+                await getCurrentUser(
+                  token,
+                );
+
+
+              if (
+                cancelled
+              ) {
+                return;
+              }
+
+
+              setState(
+                user.role ===
+                  "admin"
+                  ? "hidden"
+                  : "customer",
+              );
+
+            } catch (
+              error
+            ) {
+              if (
+                error instanceof
+                  ApiError &&
+                (
+                  error.status ===
+                    401 ||
+                  error.status ===
+                    403
+                )
+              ) {
+                removeAccessToken();
+              }
+
+
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+            }
+          }
+
+
+          void load();
+        },
+        0,
+      );
+
+
+    return () => {
+      cancelled =
+        true;
+
+      window.clearTimeout(
+        timer,
+      );
+    };
+  }, []);
+
+
+  if (
+    state ===
+      "checking" ||
+    state ===
+      "hidden"
+  ) {
+    return (
+      <div className="h-9 w-[120px]" />
+    );
+  }
+
+
+  if (
+    state ===
+    "guest"
+  ) {
+    return (
+      <div className="ml-2 flex items-center gap-2">
+        <Link
+          href="/login"
+          className="flex h-8 items-center justify-center rounded-[5px] px-3 text-[9px] font-semibold text-[#d0d9e2] transition hover:bg-white/[0.06] hover:text-white"
+        >
+          Login
+        </Link>
+
+        <Link
+          href="/register"
+          className="flex h-8 items-center justify-center rounded-[5px] bg-[#e31b2d] px-3.5 text-[9px] font-semibold text-white transition hover:bg-[#c91727]"
+        >
+          Create account
+        </Link>
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex items-center gap-1">
+      <NavbarNotificationBell />
+
+      <Link
+        href="/account"
+        aria-label="Account"
+        title="Account"
+        className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+      >
+        <UserRound className="h-[16px] w-[16px]" />
+      </Link>
+
+      <CustomerLogoutButton />
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\components\customer\CustomerLogoutButton.tsx
+============================================================
+
+"use client";
+
+import {
+  LogOut,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  removeAccessToken,
+} from "@/lib/auth";
+
+
+export default function CustomerLogoutButton() {
+  const router =
+    useRouter();
+
+
+  function logout() {
+    removeAccessToken();
+
+
+    router.replace(
+      "/login",
+    );
+
+
+    router.refresh();
+  }
+
+
+  return (
+    <button
+      type="button"
+      onClick={
+        logout
+      }
+      aria-label="Sign out"
+      title="Sign out"
+      className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+    >
+      <LogOut className="h-[16px] w-[16px]" />
+    </button>
+  );
+}
+
+
+============================================================
+FILE: .\components\notifications\NavbarNotificationBell.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Bell,
+  CheckCheck,
+  Megaphone,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type CustomerNotification,
+} from "@/lib/notifications";
+
+
+export default function NavbarNotificationBell() {
+  const router =
+    useRouter();
+
+
+  const containerRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    );
+
+
+  const [
+    notifications,
+    setNotifications,
+  ] =
+    useState<CustomerNotification[]>(
+      [],
+    );
+
+
+  const [
+    open,
+    setOpen,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const loadNotifications =
+    useCallback(
+      async () => {
+        const token =
+          getAccessToken();
+
+
+        if (!token) {
+          setNotifications(
+            [],
+          );
+
+          return;
+        }
+
+
+        try {
+          setLoading(
+            true,
+          );
+
+
+          const result =
+            await getNotifications(
+              token,
+            );
+
+
+          setNotifications(
+            result,
+          );
+
+          setError(
+            "",
+          );
+
+        } catch (
+          loadError
+        ) {
+          if (
+            loadError instanceof
+              ApiError &&
+            (
+              loadError.status ===
+                401 ||
+              loadError.status ===
+                403
+            )
+          ) {
+            removeAccessToken();
+
+            setNotifications(
+              [],
+            );
+
+            return;
+          }
+
+
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load notifications.",
+          );
+
+        } finally {
+          setLoading(
+            false,
+          );
+        }
+      },
+      [],
+    );
+
+
+  useEffect(() => {
+    const timeout =
+      window.setTimeout(
+        () => {
+          void loadNotifications();
+        },
+        0,
+      );
+
+
+    return () => {
+      window.clearTimeout(
+        timeout,
+      );
+    };
+  }, [
+    loadNotifications,
+  ]);
+
+
+  useEffect(() => {
+    function handleOutsideClick(
+      event:
+        MouseEvent,
+    ) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(
+          event.target as Node,
+        )
+      ) {
+        setOpen(
+          false,
+        );
+      }
+    }
+
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick,
+    );
+
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick,
+      );
+    };
+  }, []);
+
+
+  const unreadCount =
+    notifications.filter(
+      (
+        notification,
+      ) =>
+        !notification.is_read,
+    ).length;
+
+
+  async function toggleDropdown() {
+    const nextOpen =
+      !open;
+
+
+    setOpen(
+      nextOpen,
+    );
+
+
+    if (
+      nextOpen
+    ) {
+      await loadNotifications();
+    }
+  }
+
+
+  async function markAllRead() {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    try {
+      await markAllNotificationsRead(
+        token,
+      );
+
+
+      const now =
+        new Date()
+          .toISOString();
+
+
+      setNotifications(
+        (
+          current,
+        ) =>
+          current.map(
+            (
+              notification,
+            ) => ({
+              ...notification,
+
+              is_read:
+                true,
+
+              read_at:
+                notification.read_at ??
+                now,
+            }),
+          ),
+      );
+
+
+      setError(
+        "",
+      );
+
+    } catch (
+      readError
+    ) {
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notifications.",
+      );
+    }
+  }
+
+
+  async function openNotification(
+    notification:
+      CustomerNotification,
+  ) {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    let current =
+      notification;
+
+
+    try {
+      if (
+        !notification.is_read
+      ) {
+        current =
+          await markNotificationRead(
+            token,
+            notification.id,
+          );
+
+
+        setNotifications(
+          (
+            items,
+          ) =>
+            items.map(
+              (
+                item,
+              ) =>
+                item.id ===
+                current.id
+                  ? current
+                  : item,
+            ),
+        );
+      }
+
+
+      setOpen(
+        false,
+      );
+
+
+      if (
+        current.link &&
+        current.link.startsWith(
+          "/",
+        )
+      ) {
+        router.push(
+          current.link,
+        );
+      }
+
+    } catch (
+      readError
+    ) {
+      if (
+        readError instanceof
+          ApiError &&
+        readError.status ===
+          401
+      ) {
+        removeAccessToken();
+
+        return;
+      }
+
+
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notification.",
+      );
+    }
+  }
+
+
+  return (
+    <div
+      ref={
+        containerRef
+      }
+      className="relative"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          void toggleDropdown();
+        }}
+        aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#071523] text-white ring-1 ring-white/10 transition hover:bg-[#10293f]"
+      >
+        <Bell className="h-[17px] w-[17px]" />
+
+
+        {unreadCount >
+          0 && (
+          <span className="absolute right-0 top-0 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[8px] font-bold leading-none text-white">
+            {
+              unreadCount >
+              99
+                ? "99+"
+                : unreadCount
+            }
+          </span>
+        )}
+      </button>
+
+
+      {open && (
+        <div className="absolute right-0 top-[44px] z-[100] w-[360px] max-w-[calc(100vw-32px)] overflow-hidden rounded-[10px] border border-[#dfe3e8] bg-white text-[#101828] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
+          <div className="flex items-start justify-between border-b border-[#eaecf0] px-4 py-4">
+            <div>
+              <h2 className="text-[12px] font-bold">
+                Notifications
+              </h2>
+
+              <p className="mt-1 text-[8px] text-[#667085]">
+                {
+                  unreadCount
+                }{" "}
+                unread
+              </p>
+            </div>
+
+
+            <div className="flex items-center gap-1">
+              {unreadCount >
+                0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void markAllRead();
+                  }}
+                  className="flex h-8 items-center gap-1.5 rounded-[6px] px-2 text-[8px] font-semibold text-[#475467] hover:bg-[#f2f4f7]"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+
+                  Read all
+                </button>
+              )}
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  setOpen(
+                    false,
+                  )
+                }
+                aria-label="Close notifications"
+                className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#667085] hover:bg-[#f2f4f7]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+
+          {error && (
+            <div className="border-b border-[#fecdca] bg-[#fff4f5] px-4 py-3 text-[8px] text-[#b42318]">
+              {
+                error
+              }
+            </div>
+          )}
+
+
+          <div className="max-h-[380px] overflow-y-auto">
+            {loading &&
+            notifications.length ===
+              0 ? (
+              <div className="space-y-2 p-4">
+                {[
+                  1,
+                  2,
+                  3,
+                ].map(
+                  (
+                    item,
+                  ) => (
+                    <div
+                      key={
+                        item
+                      }
+                      className="h-[72px] animate-pulse rounded-[7px] bg-[#f2f4f7]"
+                    />
+                  ),
+                )}
+              </div>
+            ) : notifications.length ===
+              0 ? (
+              <div className="px-5 py-10 text-center">
+                <Bell className="mx-auto h-7 w-7 text-[#b8c0ca]" />
+
+                <p className="mt-3 text-[10px] font-semibold">
+                  No notifications
+                </p>
+
+                <p className="mt-1 text-[8px] text-[#98a2b3]">
+                  You&apos;re all caught up.
+                </p>
+              </div>
+            ) : (
+              notifications
+                .slice(
+                  0,
+                  6,
+                )
+                .map(
+                  (
+                    notification,
+                  ) => (
+                    <button
+                      key={
+                        notification.id
+                      }
+                      type="button"
+                      onClick={() => {
+                        void openNotification(
+                          notification,
+                        );
+                      }}
+                      className={
+                        notification.is_read
+                          ? "flex w-full gap-3 border-b border-[#f0f2f5] px-4 py-4 text-left last:border-0 hover:bg-[#fafbfc]"
+                          : "flex w-full gap-3 border-b border-[#f0f2f5] bg-[#fffafb] px-4 py-4 text-left last:border-0 hover:bg-[#fff5f6]"
+                      }
+                    >
+                      <NotificationCategoryIcon
+                        notification={
+                          notification
+                        }
+                      />
+
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="truncate text-[9px] font-bold">
+                            {
+                              notification.title
+                            }
+                          </p>
+
+
+                          {!notification.is_read && (
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#e31b2d]" />
+                          )}
+                        </div>
+
+
+                        <p className="mt-1 line-clamp-2 text-[8px] leading-4 text-[#667085]">
+                          {
+                            notification.message
+                          }
+                        </p>
+
+
+                        <p className="mt-2 text-[7px] text-[#98a2b3]">
+                          {
+                            formatDate(
+                              notification.created_at,
+                            )
+                          }
+                        </p>
+                      </div>
+                    </button>
+                  ),
+                )
+            )}
+          </div>
+
+
+          <div className="border-t border-[#eaecf0] bg-[#fafbfc] p-3">
+            <Link
+              href="/account/notifications"
+              onClick={() =>
+                setOpen(
+                  false,
+                )
+              }
+              className="flex h-9 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white text-[8px] font-semibold text-[#344054]"
+            >
+              View all notifications
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function NotificationCategoryIcon({
+  notification,
+}: {
+  notification:
+    CustomerNotification;
+}) {
+  if (
+    notification.category ===
+    "promotion"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#fff1f3] text-[#c01048]">
+        <Megaphone className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  if (
+    notification.category ===
+    "account"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#eff4ff] text-[#3538cd]">
+        <ShieldCheck className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#f2f4f7] text-[#475467]">
+      <Bell className="h-3.5 w-3.5" />
+    </div>
+  );
+}
+
+
+function formatDate(
+  value: string,
+) {
+  const date =
+    new Date(
+      value,
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "";
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "numeric",
+
+      hour:
+        "numeric",
+
+      minute:
+        "2-digit",
+    },
+  ).format(
+    date,
+  );
+}
+
+
+============================================================
+PUBLIC ASSETS
+============================================================
+
+public\file.svg
+public\globe.svg
+public\next.svg
+public\vercel.svg
+public\window.svg
+public\basis\basis_transcoder.js
+public\basis\basis_transcoder.wasm
+public\basis\README.md
+public\images\partpilot-hero-car.jpg
+public\models\ATTRIBUTION.txt
+public\models\vehnexa-car.glb
+public\product-parts\abs-wheel-speed-sensor.svg
+public\product-parts\brake-caliper.svg
+public\product-parts\brake-fluid.svg
+public\product-parts\brake-hose.svg
+public\product-parts\brake-master-cylinder.svg
+public\product-parts\brake-pad.svg
+public\product-parts\brake-rotor.svg
+public\product-parts\control-arm.jpg
+public\product-parts\inner-tie-rod.svg
+public\product-parts\outer-tie-rod.jpg
+public\product-parts\power-steering-pressure-hose.jpg
+public\product-parts\power-steering-pump.jpg
+public\product-parts\shock-absorber.jpg
+public\product-parts\strut-assembly.jpg
+public\product-parts\wheel-hub-bearing.jpg

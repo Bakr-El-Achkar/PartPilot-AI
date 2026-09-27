@@ -1,0 +1,875 @@
+==================================================
+FILE NOT FOUND: components\garage\VehicleForm.tsx
+==================================================
+
+
+==================================================
+FILE: app\account\garage\add\page.tsx
+==================================================
+"use client";
+
+import Link from "next/link";
+import {
+  FormEvent,
+  useEffect,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
+
+import {
+  ArrowLeft,
+  CarFront,
+  CheckCircle2,
+  Gauge,
+  ImageOff,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
+
+import { ApiError } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
+
+import {
+  createVehicle,
+  getVehiclePreview,
+} from "@/lib/vehicles";
+
+type FormState = {
+  year: string;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname: string;
+};
+
+const initialState: FormState = {
+  year: "",
+  make: "",
+  model: "",
+  engine: "",
+  transmission: "",
+  nickname: "",
+};
+
+export default function AddVehiclePage() {
+  const router = useRouter();
+
+  const [form, setForm] =
+    useState<FormState>(initialState);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [previewLoading, setPreviewLoading] =
+    useState(false);
+
+  const [previewImage, setPreviewImage] =
+    useState<string | null>(null);
+
+  const [previewMessage, setPreviewMessage] =
+    useState(
+      "Enter year, make and model to preview your vehicle.",
+    );
+
+  function updateField(
+    field: keyof FormState,
+    value: string,
+  ) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  useEffect(() => {
+    const year = Number(form.year);
+
+    const make = form.make.trim();
+    const model = form.model.trim();
+
+    if (
+      !Number.isInteger(year) ||
+      year < 1950 ||
+      year > 2100 ||
+      make.length < 2 ||
+      model.length < 1
+    ) {
+      setPreviewImage(null);
+
+      setPreviewMessage(
+        "Enter year, make and model to preview your vehicle.",
+      );
+
+      return;
+    }
+
+    const timeout = window.setTimeout(
+      async () => {
+        const token = getAccessToken();
+
+        if (!token) {
+          return;
+        }
+
+        try {
+          setPreviewLoading(true);
+
+          setPreviewMessage(
+            "Searching for your vehicle...",
+          );
+
+          const result =
+            await getVehiclePreview(
+              token,
+              year,
+              make,
+              model,
+            );
+
+          if (
+            result.found &&
+            result.image_url
+          ) {
+            setPreviewImage(
+              result.image_url,
+            );
+
+            setPreviewMessage(
+              "Vehicle matched successfully.",
+            );
+          } else {
+            setPreviewImage(null);
+
+            setPreviewMessage(
+              result.message ??
+                "No exact image was found.",
+            );
+          }
+        } catch (err) {
+          console.error(
+            "Vehicle preview error:",
+            err,
+          );
+
+          setPreviewImage(null);
+
+          setPreviewMessage(
+            "Vehicle preview is temporarily unavailable.",
+          );
+        } finally {
+          setPreviewLoading(false);
+        }
+      },
+      700,
+    );
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [
+    form.year,
+    form.make,
+    form.model,
+  ]);
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    setError("");
+
+    const year = Number(form.year);
+
+    if (
+      !Number.isInteger(year) ||
+      year < 1950 ||
+      year > 2100
+    ) {
+      setError(
+        "Please enter a valid model year.",
+      );
+
+      return;
+    }
+
+    const token = getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      await createVehicle(token, {
+        year,
+        make: form.make.trim(),
+        model: form.model.trim(),
+        engine: form.engine.trim(),
+        transmission:
+          form.transmission.trim(),
+        nickname:
+          form.nickname.trim() ||
+          undefined,
+        image_url:
+          previewImage || undefined,
+      });
+
+      router.push(
+        "/account/garage",
+      );
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to add vehicle.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f5f6f8] text-[#171717]">
+      {/* NAVBAR */}
+      <header className="border-b border-gray-200 bg-white">
+        <div className="mx-auto flex h-[76px] max-w-[1450px] items-center justify-between px-5 lg:px-8">
+          <Link
+            href="/account"
+            className="flex items-center gap-3"
+          >
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-600">
+              <Gauge className="h-5 w-5 text-white" />
+            </div>
+
+            <div>
+              <p className="font-black tracking-[0.16em]">
+                PART
+                <span className="text-red-600">
+                  PILOT
+                </span>
+              </p>
+
+              <p className="text-[7px] tracking-[0.25em] text-gray-400">
+                AUTOMOTIVE INTELLIGENCE
+              </p>
+            </div>
+          </Link>
+
+          <div className="hidden items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-500 md:flex">
+            <Sparkles className="h-3.5 w-3.5 text-red-600" />
+            Smart Vehicle Identification
+          </div>
+        </div>
+      </header>
+
+      <section className="mx-auto max-w-[1450px] px-5 py-8 lg:px-8 lg:py-10">
+        <Link
+          href="/account/garage"
+          className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 transition hover:text-red-600"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to My Garage
+        </Link>
+
+        {/* PAGE TITLE */}
+        <div className="mt-7">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">
+            Vehicle Setup
+          </p>
+
+          <h1 className="mt-2 text-4xl font-bold tracking-[-0.04em] md:text-5xl">
+            Add your vehicle
+          </h1>
+
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-500">
+            Enter your vehicle details and
+            PartPilot will automatically try to
+            identify and preview the matching
+            vehicle.
+          </p>
+        </div>
+
+        <div className="mt-8 grid gap-7 xl:grid-cols-[minmax(0,1fr)_540px]">
+          {/* LEFT SIDE */}
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-2xl border border-gray-200 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,.03)] md:p-8"
+          >
+            <div className="mb-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-red-600">
+                <CarFront className="h-6 w-6" />
+              </div>
+
+              <h2 className="mt-5 text-xl font-bold">
+                Vehicle information
+              </h2>
+
+              <p className="mt-2 text-sm leading-6 text-gray-500">
+                Start with the model year, make
+                and model. The preview will update
+                automatically.
+              </p>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field
+                label="Model Year"
+                placeholder="2022"
+                type="number"
+                value={form.year}
+                onChange={(value) =>
+                  updateField(
+                    "year",
+                    value,
+                  )
+                }
+              />
+
+              <Field
+                label="Make"
+                placeholder="Toyota"
+                value={form.make}
+                onChange={(value) =>
+                  updateField(
+                    "make",
+                    value,
+                  )
+                }
+              />
+
+              <Field
+                label="Model"
+                placeholder="Camry"
+                value={form.model}
+                onChange={(value) =>
+                  updateField(
+                    "model",
+                    value,
+                  )
+                }
+              />
+
+              <Field
+                label="Engine"
+                placeholder="2.5L I4"
+                value={form.engine}
+                onChange={(value) =>
+                  updateField(
+                    "engine",
+                    value,
+                  )
+                }
+              />
+
+              <TransmissionField
+                value={form.transmission}
+                onChange={(value) =>
+                  updateField(
+                    "transmission",
+                    value,
+                  )
+                }
+              />
+
+              <Field
+                label="Nickname"
+                placeholder="My Camry"
+                value={form.nickname}
+                required={false}
+                onChange={(value) =>
+                  updateField(
+                    "nickname",
+                    value,
+                  )
+                }
+              />
+            </div>
+
+            <div className="mt-7 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-semibold text-gray-700">
+                Vehicle matching
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-gray-500">
+                Year, make and model are used
+                to identify the vehicle image.
+                Engine and transmission will
+                later be used for exact parts
+                compatibility.
+              </p>
+            </div>
+
+            {error && (
+              <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Link
+                href="/account/garage"
+                className="flex h-12 items-center justify-center rounded-xl border border-gray-200 px-6 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+              >
+                Cancel
+              </Link>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-7 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Adding Vehicle...
+                  </>
+                ) : (
+                  <>
+                    <CarFront className="h-4 w-4" />
+                    Add Vehicle
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+
+          {/* RIGHT SIDE */}
+          <aside className="xl:sticky xl:top-8 xl:self-start">
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_8px_35px_rgba(0,0,0,.05)]">
+              {/* Preview header */}
+              <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-red-600">
+                    Live Vehicle Preview
+                  </p>
+
+                  <h2 className="mt-1 text-lg font-bold">
+                    Your Vehicle
+                  </h2>
+                </div>
+
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                    previewImage
+                      ? "bg-emerald-50 text-emerald-600"
+                      : "bg-gray-100 text-gray-400"
+                  }`}
+                >
+                  {previewLoading ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-red-600" />
+                  ) : previewImage ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : (
+                    <Sparkles className="h-5 w-5" />
+                  )}
+                </div>
+              </div>
+
+              {/* Vehicle image area */}
+              <div className="relative flex min-h-[390px] items-center justify-center overflow-hidden bg-gradient-to-b from-[#fafafa] via-[#f4f5f6] to-[#eceef0] p-8">
+                {/* Background grid */}
+                <div
+                  className="absolute inset-0 opacity-[0.35]"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(#dfe2e5 1px, transparent 1px), linear-gradient(90deg, #dfe2e5 1px, transparent 1px)",
+                    backgroundSize:
+                      "40px 40px",
+                  }}
+                />
+
+                {/* Red glow */}
+                <div className="absolute bottom-[-90px] left-1/2 h-52 w-80 -translate-x-1/2 rounded-full bg-red-600/10 blur-[70px]" />
+
+                {previewLoading ? (
+                  <div className="relative z-10 text-center">
+                    <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm">
+                      <RefreshCw className="h-8 w-8 animate-spin text-red-600" />
+                    </div>
+
+                    <p className="mt-5 text-sm font-semibold text-gray-700">
+                      Identifying your vehicle
+                    </p>
+
+                    <p className="mt-2 text-xs text-gray-400">
+                      Searching for the closest
+                      exact match...
+                    </p>
+                  </div>
+                ) : previewImage ? (
+                  <div className="relative z-10 w-full">
+                    <img
+                      src={previewImage}
+                      alt={`${form.year} ${form.make} ${form.model}`}
+                      className="mx-auto max-h-[310px] w-full object-contain drop-shadow-[0_28px_25px_rgba(0,0,0,.18)]"
+                    />
+
+                    <div className="mx-auto mt-3 h-4 w-[70%] rounded-[50%] bg-black/10 blur-md" />
+                  </div>
+                ) : (
+                  <div className="relative z-10 text-center">
+                    <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm">
+                      <ImageOff className="h-9 w-9 text-gray-300" />
+                    </div>
+
+                    <p className="mx-auto mt-5 max-w-[290px] text-sm leading-6 text-gray-500">
+                      {previewMessage}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Vehicle details */}
+              <div className="p-6">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      previewLoading
+                        ? "animate-pulse bg-amber-500"
+                        : previewImage
+                          ? "bg-emerald-500"
+                          : "bg-gray-300"
+                    }`}
+                  />
+
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400">
+                    {previewLoading
+                      ? "Identifying vehicle"
+                      : previewImage
+                        ? "Vehicle matched"
+                        : "Waiting for vehicle"}
+                  </span>
+                </div>
+
+                <h3 className="mt-3 min-h-[34px] text-2xl font-bold tracking-[-0.03em]">
+                  {form.year ||
+                    "Year"}{" "}
+                  {form.make ||
+                    "Make"}{" "}
+                  {form.model ||
+                    "Model"}
+                </h3>
+
+                <p className="mt-2 text-xs leading-5 text-gray-500">
+                  {previewMessage}
+                </p>
+
+                <div className="mt-6 space-y-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                  <PreviewLine
+                    label="Model year"
+                    value={
+                      form.year ||
+                      "Not selected"
+                    }
+                  />
+
+                  <PreviewLine
+                    label="Make"
+                    value={
+                      form.make ||
+                      "Not selected"
+                    }
+                  />
+
+                  <PreviewLine
+                    label="Model"
+                    value={
+                      form.model ||
+                      "Not selected"
+                    }
+                  />
+
+                  <div className="h-px bg-gray-200" />
+
+                  <PreviewLine
+                    label="Engine"
+                    value={
+                      form.engine ||
+                      "Not selected"
+                    }
+                  />
+
+                  <PreviewLine
+                    label="Transmission"
+                    value={
+                      form.transmission ||
+                      "Not selected"
+                    }
+                  />
+                </div>
+
+                {previewImage && (
+                  <div className="mt-5 flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+
+                    <div>
+                      <p className="text-xs font-semibold text-emerald-800">
+                        Vehicle image matched
+                      </p>
+
+                      <p className="mt-0.5 text-[11px] text-emerald-700/70">
+                        This preview will be
+                        saved with your garage
+                        vehicle.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function Field({
+  label,
+  placeholder,
+  value,
+  onChange,
+  type = "text",
+  required = true,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <label>
+      <span className="mb-2 block text-sm font-medium text-gray-700">
+        {label}
+
+        {!required && (
+          <span className="ml-1 font-normal text-gray-400">
+            (optional)
+          </span>
+        )}
+      </span>
+
+      <input
+        required={required}
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
+        className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 hover:border-gray-300 focus:border-red-400 focus:ring-4 focus:ring-red-50"
+      />
+    </label>
+  );
+}
+
+function TransmissionField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label>
+      <span className="mb-2 block text-sm font-medium text-gray-700">
+        Transmission
+      </span>
+
+      <select
+        required
+        value={value}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
+        className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 outline-none transition hover:border-gray-300 focus:border-red-400 focus:ring-4 focus:ring-red-50"
+      >
+        <option value="">
+          Select transmission
+        </option>
+
+        <option value="Automatic">
+          Automatic
+        </option>
+
+        <option value="Manual">
+          Manual
+        </option>
+
+        <option value="CVT">
+          CVT
+        </option>
+
+        <option value="Dual-Clutch">
+          Dual-Clutch
+        </option>
+
+        <option value="Semi-Automatic">
+          Semi-Automatic
+        </option>
+      </select>
+    </label>
+  );
+}
+
+function PreviewLine({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-6">
+      <span className="text-xs text-gray-500">
+        {label}
+      </span>
+
+      <span className="max-w-[230px] truncate text-right text-sm font-semibold text-gray-800">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+
+==================================================
+FILE NOT FOUND: app\account\garage\[vehicleId]\edit\page.tsx
+==================================================
+
+
+==================================================
+FILE: lib\api.ts
+==================================================
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+export type RegisterPayload = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  password: string;
+};
+
+export type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+export type UserPublic = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string | null;
+  role: string;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+};
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+async function readResponse(response: Response) {
+  const contentType = response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail: text || "Unexpected server response.",
+  };
+}
+
+export async function registerUser(
+  payload: RegisterPayload,
+): Promise<UserPublic> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to create account.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function loginUser(
+  payload: LoginPayload,
+): Promise<TokenResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to sign in.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function getCurrentUser(
+  token: string,
+): Promise<UserPublic> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load your account.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+

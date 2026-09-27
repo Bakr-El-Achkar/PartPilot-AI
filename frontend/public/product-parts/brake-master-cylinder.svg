@@ -1,0 +1,93 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+  <rect width="1000" height="700" fill="#ffffff"/>
+
+  <g transform="translate(155 165)">
+    <rect
+      x="210"
+      y="20"
+      width="260"
+      height="145"
+      rx="35"
+      fill="#eceff1"
+      stroke="#8d949a"
+      stroke-width="10"
+    />
+
+    <rect
+      x="255"
+      y="-15"
+      width="70"
+      height="45"
+      rx="10"
+      fill="#52595f"
+    />
+
+    <rect
+      x="365"
+      y="-15"
+      width="70"
+      height="45"
+      rx="10"
+      fill="#52595f"
+    />
+
+    <path
+      d="M140 180
+         L515 180
+         C555 180 585 210 585 250
+         L585 320
+         C585 355 555 380 520 380
+         L135 380
+         C100 380 75 355 75 320
+         L75 245
+         C75 210 105 180 140 180 Z"
+      fill="#737a80"
+      stroke="#343a3f"
+      stroke-width="12"
+    />
+
+    <rect
+      x="0"
+      y="245"
+      width="110"
+      height="70"
+      rx="20"
+      fill="#4b5156"
+    />
+
+    <rect
+      x="570"
+      y="245"
+      width="110"
+      height="70"
+      rx="20"
+      fill="#4b5156"
+    />
+
+    <circle
+      cx="220"
+      cy="280"
+      r="27"
+      fill="#b8bec3"
+    />
+
+    <circle
+      cx="450"
+      cy="280"
+      r="27"
+      fill="#b8bec3"
+    />
+  </g>
+
+  <text
+    x="500"
+    y="620"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+    font-size="28"
+    font-weight="700"
+    fill="#667085"
+  >
+    BRAKE MASTER CYLINDER
+  </text>
+</svg>

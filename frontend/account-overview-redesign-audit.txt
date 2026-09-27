@@ -1,0 +1,3036 @@
+﻿
+
+============================================================
+FILE: .\app\account\page.tsx
+============================================================
+
+"use client";
+
+import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
+
+import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
+
+import Link from "next/link";
+import {
+  useEffect,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
+
+import {
+  Bell,
+  CarFront,
+  CreditCard,
+  LayoutDashboard,
+  Loader2,
+  LogOut,
+  MapPin,
+  Package,
+  Search,
+  Settings,
+  ShoppingCart,
+  UserRound,
+} from "lucide-react";
+
+import {
+  ApiError,
+  getCurrentUser,
+  type UserPublic,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+const BRAND = "VEHNEXA";
+
+export default function AccountPage() {
+  const router = useRouter();
+
+  const [user, setUser] =
+    useState<UserPublic | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  useEffect(() => {
+    const token =
+      getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadAccount(
+      accessToken: string,
+    ) {
+      try {
+        const currentUser =
+          await getCurrentUser(
+            accessToken,
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        setUser(currentUser);
+        setError("");
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          err instanceof ApiError &&
+          (err.status === 401 ||
+            err.status === 403)
+        ) {
+          removeAccessToken();
+          router.replace("/login");
+          return;
+        }
+
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Unable to load your account.",
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadAccount(token);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  function logout() {
+    removeAccessToken();
+
+    router.replace(
+      "/login",
+    );
+  }
+
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f4f6f8]">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#e31b2d]" />
+
+          <p className="mt-4 text-xs font-bold tracking-[0.18em] text-[#667085]">
+            LOADING {BRAND}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f4f6f8] px-6">
+        <div className="max-w-md rounded-xl border border-[#dfe3e8] bg-white p-8 text-center">
+          <p className="text-sm text-[#667085]">
+            {error ||
+              "Unable to load your account."}
+          </p>
+
+          <button
+            type="button"
+            onClick={() =>
+              window.location.reload()
+            }
+            className="mt-5 rounded-md bg-[#e31b2d] px-5 py-2.5 text-sm font-semibold text-white"
+          >
+            Try again
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const fullName =
+    `${user.first_name} ${user.last_name}`.trim();
+
+  const initials =
+    `${user.first_name?.[0] ?? ""}${
+      user.last_name?.[0] ?? ""
+    }`
+      .toUpperCase()
+      .trim() || "U";
+
+  return (
+    <main className="min-h-screen bg-[#f4f6f8] text-[#101828]">
+      <VehnexaNavbar
+        initials={initials}
+      />
+
+      <section className="mx-auto max-w-[1320px] px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
+        <div className="grid overflow-hidden rounded-[10px] border border-[#dfe3e8] bg-white lg:grid-cols-[250px_minmax(0,1fr)]">
+          {/* ==================================================
+              LEFT ACCOUNT SIDEBAR
+          ================================================== */}
+
+          <aside className="border-b border-[#e4e7ec] bg-[#fbfcfd] lg:min-h-[720px] lg:border-b-0 lg:border-r">
+            <div className="border-b border-[#e4e7ec] px-6 py-7">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#e9edf2] text-base font-bold text-[#667085]">
+                  {initials}
+                </div>
+
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-[#101828]">
+                    {fullName}
+                  </p>
+
+                  <p className="mt-1 truncate text-[11px] text-[#667085]">
+                    {user.email}
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-4 text-[11px] text-[#98a2b3]">
+                Customer account
+              </p>
+            </div>
+
+            <nav className="space-y-1 px-3 py-5">
+              <SidebarButton
+                icon={
+                  <LayoutDashboard className="h-4 w-4" />
+                }
+                label="Overview"
+              />
+
+              <SidebarButton
+                icon={
+                  <Package className="h-4 w-4" />
+                }
+                label="Orders"
+                active
+              />
+
+              <Link
+                href="/account/garage"
+                className="flex h-10 items-center gap-3 rounded-md px-3 text-[12px] font-medium text-[#475467] transition hover:bg-[#f2f4f7] hover:text-[#101828]"
+              >
+                <CarFront className="h-4 w-4 text-[#667085]" />
+
+                My Vehicles
+              </Link>
+
+              <SidebarButton
+                icon={
+                  <MapPin className="h-4 w-4" />
+                }
+                label="Addresses"
+              />
+
+              <SidebarButton
+                icon={
+                  <CreditCard className="h-4 w-4" />
+                }
+                label="Payment Methods"
+              />
+
+              <SidebarButton
+                icon={
+                  <Settings className="h-4 w-4" />
+                }
+                label="Account Settings"
+              />
+
+              <Link
+                href="/account/notifications"
+                className="flex h-10 items-center gap-3 rounded-md px-3 text-[12px] font-medium text-[#475467] transition hover:bg-[#f2f4f7] hover:text-[#101828]"
+              >
+                <Bell className="h-4 w-4 text-[#667085]" />
+
+                Notifications
+              </Link>
+            </nav>
+
+            <div className="mt-auto border-t border-[#e4e7ec] px-4 py-5">
+              <button
+                type="button"
+                onClick={logout}
+                className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-[12px] font-medium text-[#667085] transition hover:bg-[#fff1f2] hover:text-[#e31b2d]"
+              >
+                <LogOut className="h-4 w-4" />
+
+                Sign Out
+              </button>
+            </div>
+          </aside>
+
+          {/* ==================================================
+              ORDERS CONTENT
+          ================================================== */}
+
+          <section className="min-w-0 bg-white">
+            <div className="px-5 pt-7 sm:px-8 lg:px-10 lg:pt-9">
+              <h1 className="text-[28px] font-bold tracking-[-0.035em] text-[#101828]">
+                My Orders
+              </h1>
+
+              <p className="mt-1.5 text-[12px] text-[#667085]">
+                View your purchase
+                history and track your
+                orders.
+              </p>
+
+              {/* ORDER TABS */}
+
+              <div className="mt-7 overflow-x-auto border-b border-[#e4e7ec]">
+                <div className="flex min-w-max gap-7">
+                  <OrderTab
+                    label="All Orders"
+                    active
+                  />
+
+                  <OrderTab
+                    label="Processing"
+                  />
+
+                  <OrderTab
+                    label="Shipped"
+                  />
+
+                  <OrderTab
+                    label="Delivered"
+                  />
+
+                  <OrderTab
+                    label="Cancelled"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* EMPTY ORDERS STATE */}
+
+            <div className="px-5 pb-12 pt-7 sm:px-8 lg:px-10">
+              <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-[#e4e7ec] bg-[#fcfcfd] px-6 py-14">
+                <div className="max-w-[420px] text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-[#e4e7ec] bg-white">
+                    <Package className="h-6 w-6 text-[#98a2b3]" />
+                  </div>
+
+                  <h2 className="mt-5 text-lg font-bold text-[#101828]">
+                    No orders yet
+                  </h2>
+
+                  <p className="mx-auto mt-2 max-w-[330px] text-[12px] leading-5 text-[#667085]">
+                    When you place an
+                    order, its status,
+                    total and tracking
+                    information will
+                    appear here.
+                  </p>
+
+                  <Link
+                    href="/shop"
+                    className="mx-auto mt-6 flex h-10 w-fit items-center justify-center rounded-md bg-[#e31b2d] px-6 text-[12px] font-semibold text-white transition hover:bg-[#c81727]"
+                  >
+                    Browse Parts
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+/* ==========================================================
+   VEHNEXA NAVBAR
+========================================================== */
+
+function VehnexaNavbar({
+  initials,
+}: {
+  initials: string;
+}) {
+  return (
+    <header className="border-b border-[#17293b] bg-[#071b2d]">
+      <div className="mx-auto flex h-[64px] max-w-[1320px] items-center px-4 sm:px-6 lg:px-8">
+        {/* LOGO */}
+
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2.5"
+        >
+          <VehnexaMark />
+
+          <span className="text-[15px] font-bold tracking-[-0.02em] text-white">
+            Vehnexa
+          </span>
+        </Link>
+
+        {/* NAV */}
+
+        <nav className="ml-10 hidden h-full items-center gap-7 lg:flex">
+          <TopNavLink
+            href="/shop"
+            label="Shop"
+          />
+
+          <TopNavLink
+            href="/account/garage"
+            label="My Garage"
+          />
+
+          <TopNavLink
+            href="/ai-mechanic"
+            label="AI Mechanic"
+          />
+
+          <TopNavLink
+            href="#resources"
+            label="Resources"
+          />
+        </nav>
+
+        {/* RIGHT ACTIONS */}
+
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            aria-label="Search"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-[#c6d0da] transition hover:bg-white/5 hover:text-white"
+          >
+            <Search className="h-[17px] w-[17px]" />
+          </button>
+
+          <button
+            type="button"
+            aria-label="Cart"
+            className="relative flex h-9 w-9 items-center justify-center rounded-md text-[#c6d0da] transition hover:bg-white/5 hover:text-white"
+          >
+            <ShoppingCart className="h-[17px] w-[17px]" />
+
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#e31b2d]" />
+          </button>
+
+          <NavbarNotificationBell />
+
+          <Link
+            href="/account"
+            aria-label="Account"
+            className="ml-1 flex h-9 w-9 items-center justify-center rounded-md text-[#c6d0da] transition hover:bg-white/5 hover:text-white"
+          >
+            <UserRound className="h-[17px] w-[17px]" />
+
+            <span className="sr-only">
+              {initials}
+            </span>
+          </Link>
+
+          <CustomerLogoutButton />
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ==========================================================
+   LOGO MARK
+========================================================== */
+
+function VehnexaMark() {
+  return (
+    <div
+      aria-label={BRAND}
+      className="relative h-7 w-7 shrink-0"
+    >
+      <span className="absolute left-[1px] top-[3px] block h-[22px] w-[10px] -skew-x-[25deg] rounded-[2px] bg-[#e31b2d]" />
+
+      <span className="absolute right-[2px] top-[3px] block h-[22px] w-[10px] skew-x-[25deg] rounded-[2px] bg-[#d8dee5]" />
+
+      <span className="sr-only">
+        VEHNEXA
+      </span>
+    </div>
+  );
+}
+
+/* ==========================================================
+   TOP NAV ITEM
+========================================================== */
+
+function TopNavLink({
+  href,
+  label,
+}: {
+  href: string;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex h-full items-center text-[11px] font-medium text-[#b9c5d0] transition hover:text-white"
+    >
+      {label}
+    </Link>
+  );
+}
+
+/* ==========================================================
+   SIDEBAR ITEM
+========================================================== */
+
+function SidebarButton({
+  icon,
+  label,
+  active = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`relative flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-[12px] font-medium transition ${
+        active
+          ? "bg-[#fff0f1] text-[#e31b2d]"
+          : "text-[#475467] hover:bg-[#f2f4f7] hover:text-[#101828]"
+      }`}
+    >
+      {active && (
+        <span className="absolute bottom-1 left-0 top-1 w-[3px] rounded-r-full bg-[#e31b2d]" />
+      )}
+
+      <span
+        className={
+          active
+            ? "text-[#e31b2d]"
+            : "text-[#667085]"
+        }
+      >
+        {icon}
+      </span>
+
+      {label}
+    </button>
+  );
+}
+
+/* ==========================================================
+   ORDER TAB
+========================================================== */
+
+function OrderTab({
+  label,
+  active = false,
+}: {
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`relative pb-3 text-[11px] font-semibold transition ${
+        active
+          ? "text-[#e31b2d]"
+          : "text-[#667085] hover:text-[#101828]"
+      }`}
+    >
+      {label}
+
+      {active && (
+        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#e31b2d]" />
+      )}
+    </button>
+  );
+}
+
+============================================================
+FILE: .\lib\auth.ts
+============================================================
+
+const TOKEN_KEY = "partpilot_access_token";
+
+export function saveAccessToken(token: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function removeAccessToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+export function isAuthenticated(): boolean {
+  return Boolean(getAccessToken());
+}
+
+============================================================
+FILE: .\lib\api.ts
+============================================================
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+export type RegisterPayload = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  password: string;
+};
+
+export type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+export type UserPublic = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string | null;
+  role: string;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+};
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+async function readResponse(response: Response) {
+  const contentType = response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail: text || "Unexpected server response.",
+  };
+}
+
+export async function registerUser(
+  payload: RegisterPayload,
+): Promise<UserPublic> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to create account.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function loginUser(
+  payload: LoginPayload,
+): Promise<TokenResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to sign in.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function getCurrentUser(
+  token: string,
+): Promise<UserPublic> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load your account.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+============================================================
+FILE: .\lib\orders.ts
+============================================================
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+
+export type OrderItem = {
+  product_id: string;
+
+  name: string;
+  slug: string;
+  sku: string;
+
+  image_url: string | null;
+
+  unit_price: number;
+  quantity: number;
+  line_total: number;
+};
+
+
+export type Order = {
+  id: string;
+  order_number: string;
+
+  vehicle_id: string | null;
+
+  items: OrderItem[];
+
+  subtotal: number;
+  delivery_fee: number;
+  discount: number;
+  total: number;
+
+  payment_method: string;
+  payment_status: string;
+
+  shipping_address: string;
+
+  status: string;
+
+  created_at: string;
+  updated_at: string;
+};
+
+
+export type CreateOrderPayload = {
+  items: {
+    product_id: string;
+    quantity: number;
+  }[];
+
+  shipping_address: string;
+
+  payment_method:
+    "cash_on_delivery";
+
+  vehicle_id?: string | null;
+};
+
+
+function authHeaders(
+  token: string,
+) {
+  return {
+    "Content-Type":
+      "application/json",
+
+    Authorization:
+      `Bearer ${token}`,
+  };
+}
+
+
+async function readResponse(
+  response: Response,
+): Promise<unknown> {
+  const text =
+    await response.text();
+
+
+  if (!text) {
+    return null;
+  }
+
+
+  try {
+    return JSON.parse(
+      text,
+    );
+  } catch {
+    return text;
+  }
+}
+
+
+function getErrorMessage(
+  data: unknown,
+  fallback: string,
+): string {
+  if (
+    typeof data ===
+    "object" &&
+    data !== null &&
+    "detail" in data
+  ) {
+    const detail =
+      (
+        data as {
+          detail?: unknown;
+        }
+      ).detail;
+
+
+    if (
+      typeof detail ===
+      "string"
+    ) {
+      return detail;
+    }
+  }
+
+
+  return fallback;
+}
+
+
+export async function createOrder(
+  token: string,
+  payload: CreateOrderPayload,
+): Promise<Order> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/orders`,
+      {
+        method: "POST",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+
+        body:
+          JSON.stringify(
+            payload,
+          ),
+      },
+    );
+
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      getErrorMessage(
+        data,
+        "Unable to place order.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as Order;
+}
+
+
+export async function getOrders(
+  token: string,
+): Promise<Order[]> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/orders`,
+      {
+        method: "GET",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+
+        cache:
+          "no-store",
+      },
+    );
+
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      getErrorMessage(
+        data,
+        "Unable to load orders.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as Order[];
+}
+
+
+export async function getOrder(
+  token: string,
+  orderId: string,
+): Promise<Order> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/orders/${encodeURIComponent(
+        orderId,
+      )}`,
+      {
+        method: "GET",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+
+        cache:
+          "no-store",
+      },
+    );
+
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      getErrorMessage(
+        data,
+        "Unable to load order.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as Order;
+}
+
+
+============================================================
+FILE: .\lib\vehicles.ts
+============================================================
+
+import { ApiError } from "@/lib/api";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+export type Vehicle = {
+  id: string;
+  user_id: string;
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string | null;
+  image_url?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type VehicleCreatePayload = {
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string;
+  image_url?: string;
+};
+
+
+export type VehiclePreview = {
+  found: boolean;
+  image_url: string | null;
+  thumbnail_url: string | null;
+  source_url: string | null;
+  message: string | null;
+};
+
+export type VehicleUpdatePayload = Partial<VehicleCreatePayload>;
+
+async function readResponse(response: Response) {
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType =
+    response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail:
+      text ||
+      "Unexpected response from PartPilot.",
+  };
+}
+
+function authHeaders(token: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+export async function getVehicles(
+  token: string,
+): Promise<Vehicle[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicles.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function getVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function createVehicle(
+  token: string,
+  payload: VehicleCreatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to add vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function updateVehicle(
+  token: string,
+  vehicleId: string,
+  payload: VehicleUpdatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to update vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function setActiveVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}/active`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to activate vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function deleteVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await readResponse(response);
+
+    throw new ApiError(
+      data?.detail ?? "Unable to delete vehicle.",
+      response.status,
+    );
+  }
+}
+
+
+
+export async function getVehiclePreview(
+  token: string,
+  year: number,
+  make: string,
+  model: string,
+): Promise<VehiclePreview> {
+  const params = new URLSearchParams({
+    year: String(year),
+    make,
+    model,
+  });
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/preview/image?${params.toString()}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to load vehicle preview.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+============================================================
+FILE: .\lib\addresses.ts
+============================================================
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+
+export type Address = {
+  id: string;
+
+  label: string;
+
+  recipient_name: string;
+  phone: string;
+
+  address_line1: string;
+  address_line2: string | null;
+
+  city: string;
+  region: string | null;
+  country: string;
+
+  postal_code: string | null;
+
+  is_default: boolean;
+
+  created_at: string;
+  updated_at: string;
+};
+
+
+export type AddressPayload = {
+  label: string;
+
+  recipient_name: string;
+  phone: string;
+
+  address_line1: string;
+  address_line2?: string | null;
+
+  city: string;
+  region?: string | null;
+
+  country: string;
+
+  postal_code?: string | null;
+};
+
+
+function authHeaders(
+  token: string,
+) {
+  return {
+    "Content-Type":
+      "application/json",
+
+    Authorization:
+      `Bearer ${token}`,
+  };
+}
+
+
+async function parseResponse(
+  response: Response,
+): Promise<unknown> {
+  const text =
+    await response.text();
+
+
+  if (!text) {
+    return null;
+  }
+
+
+  try {
+    return JSON.parse(
+      text,
+    );
+  } catch {
+    return text;
+  }
+}
+
+
+function errorMessage(
+  data: unknown,
+  fallback: string,
+) {
+  if (
+    typeof data ===
+      "object" &&
+    data !== null &&
+    "detail" in data
+  ) {
+    const detail =
+      (
+        data as {
+          detail?: unknown;
+        }
+      ).detail;
+
+
+    if (
+      typeof detail ===
+      "string"
+    ) {
+      return detail;
+    }
+  }
+
+
+  return fallback;
+}
+
+
+export async function getAddresses(
+  token: string,
+): Promise<Address[]> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/addresses`,
+      {
+        headers:
+          authHeaders(
+            token,
+          ),
+
+        cache:
+          "no-store",
+      },
+    );
+
+
+  const data =
+    await parseResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      errorMessage(
+        data,
+        "Unable to load saved addresses.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as Address[];
+}
+
+
+export async function createAddress(
+  token: string,
+  payload: AddressPayload,
+): Promise<Address> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/addresses`,
+      {
+        method:
+          "POST",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+
+        body:
+          JSON.stringify(
+            payload,
+          ),
+      },
+    );
+
+
+  const data =
+    await parseResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      errorMessage(
+        data,
+        "Unable to save address.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as Address;
+}
+
+
+export async function updateAddress(
+  token: string,
+  addressId: string,
+  payload: Partial<
+    AddressPayload
+  >,
+): Promise<Address> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/addresses/${encodeURIComponent(
+        addressId,
+      )}`,
+      {
+        method:
+          "PATCH",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+
+        body:
+          JSON.stringify(
+            payload,
+          ),
+      },
+    );
+
+
+  const data =
+    await parseResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      errorMessage(
+        data,
+        "Unable to update address.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as Address;
+}
+
+
+export async function setDefaultAddress(
+  token: string,
+  addressId: string,
+): Promise<Address> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/addresses/${encodeURIComponent(
+        addressId,
+      )}/default`,
+      {
+        method:
+          "PATCH",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+      },
+    );
+
+
+  const data =
+    await parseResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      errorMessage(
+        data,
+        "Unable to set default address.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as Address;
+}
+
+
+export async function deleteAddress(
+  token: string,
+  addressId: string,
+): Promise<void> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/addresses/${encodeURIComponent(
+        addressId,
+      )}`,
+      {
+        method:
+          "DELETE",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+      },
+    );
+
+
+  if (!response.ok) {
+    const data =
+      await parseResponse(
+        response,
+      );
+
+
+    throw new ApiError(
+      errorMessage(
+        data,
+        "Unable to delete address.",
+      ),
+      response.status,
+    );
+  }
+}
+
+
+============================================================
+FILE: .\lib\wishlist.ts
+============================================================
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+import type {
+  Product,
+} from "@/lib/products";
+
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+
+function authHeaders(
+  token: string,
+) {
+  return {
+    Authorization:
+      `Bearer ${token}`,
+  };
+}
+
+
+async function readResponse(
+  response: Response,
+): Promise<unknown> {
+  if (
+    response.status ===
+    204
+  ) {
+    return null;
+  }
+
+
+  const text =
+    await response.text();
+
+
+  if (!text) {
+    return null;
+  }
+
+
+  try {
+    return JSON.parse(
+      text,
+    );
+  } catch {
+    return text;
+  }
+}
+
+
+function getErrorMessage(
+  data: unknown,
+  fallback: string,
+) {
+  if (
+    typeof data ===
+      "object" &&
+    data !== null &&
+    "detail" in data
+  ) {
+    const detail =
+      (
+        data as {
+          detail?: unknown;
+        }
+      ).detail;
+
+
+    if (
+      typeof detail ===
+      "string"
+    ) {
+      return detail;
+    }
+  }
+
+
+  return fallback;
+}
+
+
+export async function getWishlist(
+  token: string,
+): Promise<Product[]> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/wishlist`,
+      {
+        headers:
+          authHeaders(
+            token,
+          ),
+
+        cache:
+          "no-store",
+      },
+    );
+
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      getErrorMessage(
+        data,
+        "Unable to load wishlist.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as Product[];
+}
+
+
+export async function getWishlistProductIds(
+  token: string,
+): Promise<string[]> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/wishlist/product-ids`,
+      {
+        headers:
+          authHeaders(
+            token,
+          ),
+
+        cache:
+          "no-store",
+      },
+    );
+
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      getErrorMessage(
+        data,
+        "Unable to load wishlist.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as string[];
+}
+
+
+export async function addWishlistProduct(
+  token: string,
+  productId: string,
+): Promise<Product> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/wishlist/${encodeURIComponent(
+        productId,
+      )}`,
+      {
+        method:
+          "POST",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+      },
+    );
+
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      getErrorMessage(
+        data,
+        "Unable to add product to wishlist.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as Product;
+}
+
+
+export async function removeWishlistProduct(
+  token: string,
+  productId: string,
+): Promise<void> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/wishlist/${encodeURIComponent(
+        productId,
+      )}`,
+      {
+        method:
+          "DELETE",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+      },
+    );
+
+
+  if (!response.ok) {
+    const data =
+      await readResponse(
+        response,
+      );
+
+
+    throw new ApiError(
+      getErrorMessage(
+        data,
+        "Unable to remove product from wishlist.",
+      ),
+      response.status,
+    );
+  }
+}
+
+
+============================================================
+FILE: .\lib\notifications.ts
+============================================================
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+
+export type NotificationCategory =
+  | "general"
+  | "promotion"
+  | "account";
+
+
+export type NotificationSource =
+  | "admin"
+  | "system";
+
+
+export type CustomerNotification = {
+  id: string;
+  user_id: string;
+
+  category:
+    NotificationCategory;
+
+  title: string;
+  message: string;
+
+  link: string | null;
+
+  source:
+    NotificationSource;
+
+  is_read: boolean;
+  read_at: string | null;
+
+  created_at: string;
+};
+
+
+export type NotificationReadAllResponse = {
+  updated_count: number;
+};
+
+
+async function readResponse(
+  response: Response,
+): Promise<unknown> {
+  const text =
+    await response.text();
+
+
+  if (!text) {
+    return null;
+  }
+
+
+  try {
+    return JSON.parse(
+      text,
+    );
+
+  } catch {
+    return text;
+  }
+}
+
+
+function errorMessage(
+  data: unknown,
+  fallback: string,
+) {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "detail" in data
+  ) {
+    const detail =
+      (
+        data as {
+          detail?: unknown;
+        }
+      ).detail;
+
+
+    if (
+      typeof detail ===
+      "string"
+    ) {
+      return detail;
+    }
+  }
+
+
+  return fallback;
+}
+
+
+function authHeaders(
+  token: string,
+) {
+  return {
+    Accept:
+      "application/json",
+
+    Authorization:
+      `Bearer ${token}`,
+  };
+}
+
+
+export async function getNotifications(
+  token: string,
+): Promise<CustomerNotification[]> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/notifications`,
+      {
+        method:
+          "GET",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+
+        cache:
+          "no-store",
+      },
+    );
+
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      errorMessage(
+        data,
+        "Unable to load notifications.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as
+    CustomerNotification[];
+}
+
+
+export async function markNotificationRead(
+  token: string,
+  notificationId: string,
+): Promise<CustomerNotification> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/notifications/${encodeURIComponent(
+        notificationId,
+      )}/read`,
+      {
+        method:
+          "PATCH",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+      },
+    );
+
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      errorMessage(
+        data,
+        "Unable to mark notification as read.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as
+    CustomerNotification;
+}
+
+
+export async function markAllNotificationsRead(
+  token: string,
+): Promise<NotificationReadAllResponse> {
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/notifications/read-all`,
+      {
+        method:
+          "PATCH",
+
+        headers:
+          authHeaders(
+            token,
+          ),
+      },
+    );
+
+
+  const data =
+    await readResponse(
+      response,
+    );
+
+
+  if (!response.ok) {
+    throw new ApiError(
+      errorMessage(
+        data,
+        "Unable to mark notifications as read.",
+      ),
+      response.status,
+    );
+  }
+
+
+  return data as
+    NotificationReadAllResponse;
+}
+
+
+============================================================
+FILE: .\components\customer\PublicNavbarAuthActions.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  UserRound,
+} from "lucide-react";
+
+import {
+  ApiError,
+  getCurrentUser,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
+
+import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
+
+
+type SessionState =
+  | "checking"
+  | "guest"
+  | "customer"
+  | "hidden";
+
+
+export default function PublicNavbarAuthActions() {
+  const [
+    state,
+    setState,
+  ] =
+    useState<SessionState>(
+      "checking",
+    );
+
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+
+    const timer =
+      window.setTimeout(
+        () => {
+          async function load() {
+            const token =
+              getAccessToken();
+
+
+            if (!token) {
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+
+
+              return;
+            }
+
+
+            try {
+              const user =
+                await getCurrentUser(
+                  token,
+                );
+
+
+              if (
+                cancelled
+              ) {
+                return;
+              }
+
+
+              setState(
+                user.role ===
+                  "admin"
+                  ? "hidden"
+                  : "customer",
+              );
+
+            } catch (
+              error
+            ) {
+              if (
+                error instanceof
+                  ApiError &&
+                (
+                  error.status ===
+                    401 ||
+                  error.status ===
+                    403
+                )
+              ) {
+                removeAccessToken();
+              }
+
+
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+            }
+          }
+
+
+          void load();
+        },
+        0,
+      );
+
+
+    return () => {
+      cancelled =
+        true;
+
+      window.clearTimeout(
+        timer,
+      );
+    };
+  }, []);
+
+
+  if (
+    state ===
+      "checking" ||
+    state ===
+      "hidden"
+  ) {
+    return (
+      <div className="h-9 w-[120px]" />
+    );
+  }
+
+
+  if (
+    state ===
+    "guest"
+  ) {
+    return (
+      <div className="ml-2 flex items-center gap-2">
+        <Link
+          href="/login"
+          className="flex h-8 items-center justify-center rounded-[5px] px-3 text-[9px] font-semibold text-[#d0d9e2] transition hover:bg-white/[0.06] hover:text-white"
+        >
+          Login
+        </Link>
+
+        <Link
+          href="/register"
+          className="flex h-8 items-center justify-center rounded-[5px] bg-[#e31b2d] px-3.5 text-[9px] font-semibold text-white transition hover:bg-[#c91727]"
+        >
+          Create account
+        </Link>
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex items-center gap-1">
+      <NavbarNotificationBell />
+
+      <Link
+        href="/account"
+        aria-label="Account"
+        title="Account"
+        className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+      >
+        <UserRound className="h-[16px] w-[16px]" />
+      </Link>
+
+      <CustomerLogoutButton />
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\components\customer\CustomerLogoutButton.tsx
+============================================================
+
+"use client";
+
+import {
+  LogOut,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  removeAccessToken,
+} from "@/lib/auth";
+
+
+export default function CustomerLogoutButton() {
+  const router =
+    useRouter();
+
+
+  function logout() {
+    removeAccessToken();
+
+
+    router.replace(
+      "/login",
+    );
+
+
+    router.refresh();
+  }
+
+
+  return (
+    <button
+      type="button"
+      onClick={
+        logout
+      }
+      aria-label="Sign out"
+      title="Sign out"
+      className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+    >
+      <LogOut className="h-[16px] w-[16px]" />
+    </button>
+  );
+}
+
+
+============================================================
+FILE: .\components\notifications\NavbarNotificationBell.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Bell,
+  CheckCheck,
+  Megaphone,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type CustomerNotification,
+} from "@/lib/notifications";
+
+
+export default function NavbarNotificationBell() {
+  const router =
+    useRouter();
+
+
+  const containerRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    );
+
+
+  const [
+    notifications,
+    setNotifications,
+  ] =
+    useState<CustomerNotification[]>(
+      [],
+    );
+
+
+  const [
+    open,
+    setOpen,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const loadNotifications =
+    useCallback(
+      async () => {
+        const token =
+          getAccessToken();
+
+
+        if (!token) {
+          setNotifications(
+            [],
+          );
+
+          return;
+        }
+
+
+        try {
+          setLoading(
+            true,
+          );
+
+
+          const result =
+            await getNotifications(
+              token,
+            );
+
+
+          setNotifications(
+            result,
+          );
+
+          setError(
+            "",
+          );
+
+        } catch (
+          loadError
+        ) {
+          if (
+            loadError instanceof
+              ApiError &&
+            (
+              loadError.status ===
+                401 ||
+              loadError.status ===
+                403
+            )
+          ) {
+            removeAccessToken();
+
+            setNotifications(
+              [],
+            );
+
+            return;
+          }
+
+
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load notifications.",
+          );
+
+        } finally {
+          setLoading(
+            false,
+          );
+        }
+      },
+      [],
+    );
+
+
+  useEffect(() => {
+    const timeout =
+      window.setTimeout(
+        () => {
+          void loadNotifications();
+        },
+        0,
+      );
+
+
+    return () => {
+      window.clearTimeout(
+        timeout,
+      );
+    };
+  }, [
+    loadNotifications,
+  ]);
+
+
+  useEffect(() => {
+    function handleOutsideClick(
+      event:
+        MouseEvent,
+    ) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(
+          event.target as Node,
+        )
+      ) {
+        setOpen(
+          false,
+        );
+      }
+    }
+
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick,
+    );
+
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick,
+      );
+    };
+  }, []);
+
+
+  const unreadCount =
+    notifications.filter(
+      (
+        notification,
+      ) =>
+        !notification.is_read,
+    ).length;
+
+
+  async function toggleDropdown() {
+    const nextOpen =
+      !open;
+
+
+    setOpen(
+      nextOpen,
+    );
+
+
+    if (
+      nextOpen
+    ) {
+      await loadNotifications();
+    }
+  }
+
+
+  async function markAllRead() {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    try {
+      await markAllNotificationsRead(
+        token,
+      );
+
+
+      const now =
+        new Date()
+          .toISOString();
+
+
+      setNotifications(
+        (
+          current,
+        ) =>
+          current.map(
+            (
+              notification,
+            ) => ({
+              ...notification,
+
+              is_read:
+                true,
+
+              read_at:
+                notification.read_at ??
+                now,
+            }),
+          ),
+      );
+
+
+      setError(
+        "",
+      );
+
+    } catch (
+      readError
+    ) {
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notifications.",
+      );
+    }
+  }
+
+
+  async function openNotification(
+    notification:
+      CustomerNotification,
+  ) {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    let current =
+      notification;
+
+
+    try {
+      if (
+        !notification.is_read
+      ) {
+        current =
+          await markNotificationRead(
+            token,
+            notification.id,
+          );
+
+
+        setNotifications(
+          (
+            items,
+          ) =>
+            items.map(
+              (
+                item,
+              ) =>
+                item.id ===
+                current.id
+                  ? current
+                  : item,
+            ),
+        );
+      }
+
+
+      setOpen(
+        false,
+      );
+
+
+      if (
+        current.link &&
+        current.link.startsWith(
+          "/",
+        )
+      ) {
+        router.push(
+          current.link,
+        );
+      }
+
+    } catch (
+      readError
+    ) {
+      if (
+        readError instanceof
+          ApiError &&
+        readError.status ===
+          401
+      ) {
+        removeAccessToken();
+
+        return;
+      }
+
+
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notification.",
+      );
+    }
+  }
+
+
+  return (
+    <div
+      ref={
+        containerRef
+      }
+      className="relative"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          void toggleDropdown();
+        }}
+        aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#071523] text-white ring-1 ring-white/10 transition hover:bg-[#10293f]"
+      >
+        <Bell className="h-[17px] w-[17px]" />
+
+
+        {unreadCount >
+          0 && (
+          <span className="absolute right-0 top-0 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[8px] font-bold leading-none text-white">
+            {
+              unreadCount >
+              99
+                ? "99+"
+                : unreadCount
+            }
+          </span>
+        )}
+      </button>
+
+
+      {open && (
+        <div className="absolute right-0 top-[44px] z-[100] w-[360px] max-w-[calc(100vw-32px)] overflow-hidden rounded-[10px] border border-[#dfe3e8] bg-white text-[#101828] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
+          <div className="flex items-start justify-between border-b border-[#eaecf0] px-4 py-4">
+            <div>
+              <h2 className="text-[12px] font-bold">
+                Notifications
+              </h2>
+
+              <p className="mt-1 text-[8px] text-[#667085]">
+                {
+                  unreadCount
+                }{" "}
+                unread
+              </p>
+            </div>
+
+
+            <div className="flex items-center gap-1">
+              {unreadCount >
+                0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void markAllRead();
+                  }}
+                  className="flex h-8 items-center gap-1.5 rounded-[6px] px-2 text-[8px] font-semibold text-[#475467] hover:bg-[#f2f4f7]"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+
+                  Read all
+                </button>
+              )}
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  setOpen(
+                    false,
+                  )
+                }
+                aria-label="Close notifications"
+                className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#667085] hover:bg-[#f2f4f7]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+
+          {error && (
+            <div className="border-b border-[#fecdca] bg-[#fff4f5] px-4 py-3 text-[8px] text-[#b42318]">
+              {
+                error
+              }
+            </div>
+          )}
+
+
+          <div className="max-h-[380px] overflow-y-auto">
+            {loading &&
+            notifications.length ===
+              0 ? (
+              <div className="space-y-2 p-4">
+                {[
+                  1,
+                  2,
+                  3,
+                ].map(
+                  (
+                    item,
+                  ) => (
+                    <div
+                      key={
+                        item
+                      }
+                      className="h-[72px] animate-pulse rounded-[7px] bg-[#f2f4f7]"
+                    />
+                  ),
+                )}
+              </div>
+            ) : notifications.length ===
+              0 ? (
+              <div className="px-5 py-10 text-center">
+                <Bell className="mx-auto h-7 w-7 text-[#b8c0ca]" />
+
+                <p className="mt-3 text-[10px] font-semibold">
+                  No notifications
+                </p>
+
+                <p className="mt-1 text-[8px] text-[#98a2b3]">
+                  You&apos;re all caught up.
+                </p>
+              </div>
+            ) : (
+              notifications
+                .slice(
+                  0,
+                  6,
+                )
+                .map(
+                  (
+                    notification,
+                  ) => (
+                    <button
+                      key={
+                        notification.id
+                      }
+                      type="button"
+                      onClick={() => {
+                        void openNotification(
+                          notification,
+                        );
+                      }}
+                      className={
+                        notification.is_read
+                          ? "flex w-full gap-3 border-b border-[#f0f2f5] px-4 py-4 text-left last:border-0 hover:bg-[#fafbfc]"
+                          : "flex w-full gap-3 border-b border-[#f0f2f5] bg-[#fffafb] px-4 py-4 text-left last:border-0 hover:bg-[#fff5f6]"
+                      }
+                    >
+                      <NotificationCategoryIcon
+                        notification={
+                          notification
+                        }
+                      />
+
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="truncate text-[9px] font-bold">
+                            {
+                              notification.title
+                            }
+                          </p>
+
+
+                          {!notification.is_read && (
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#e31b2d]" />
+                          )}
+                        </div>
+
+
+                        <p className="mt-1 line-clamp-2 text-[8px] leading-4 text-[#667085]">
+                          {
+                            notification.message
+                          }
+                        </p>
+
+
+                        <p className="mt-2 text-[7px] text-[#98a2b3]">
+                          {
+                            formatDate(
+                              notification.created_at,
+                            )
+                          }
+                        </p>
+                      </div>
+                    </button>
+                  ),
+                )
+            )}
+          </div>
+
+
+          <div className="border-t border-[#eaecf0] bg-[#fafbfc] p-3">
+            <Link
+              href="/account/notifications"
+              onClick={() =>
+                setOpen(
+                  false,
+                )
+              }
+              className="flex h-9 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white text-[8px] font-semibold text-[#344054]"
+            >
+              View all notifications
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function NotificationCategoryIcon({
+  notification,
+}: {
+  notification:
+    CustomerNotification;
+}) {
+  if (
+    notification.category ===
+    "promotion"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#fff1f3] text-[#c01048]">
+        <Megaphone className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  if (
+    notification.category ===
+    "account"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#eff4ff] text-[#3538cd]">
+        <ShieldCheck className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#f2f4f7] text-[#475467]">
+      <Bell className="h-3.5 w-3.5" />
+    </div>
+  );
+}
+
+
+function formatDate(
+  value: string,
+) {
+  const date =
+    new Date(
+      value,
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "";
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "numeric",
+
+      hour:
+        "numeric",
+
+      minute:
+        "2-digit",
+    },
+  ).format(
+    date,
+  );
+}
+
+
+============================================================
+FILE: .\package.json
+============================================================
+
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.8.0",
+    "framer-motion": "^13.2.0",
+    "lucide-react": "^1.45.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+

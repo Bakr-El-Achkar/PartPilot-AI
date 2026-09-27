@@ -1,0 +1,2319 @@
+"use client";
+
+import Link from "next/link";
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  Bell,
+  Bot,
+  CarFront,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  LayoutDashboard,
+  Package,
+  Pencil,
+  Plus,
+  Search,
+  Shapes,
+  ShoppingBag,
+  Star,
+  Tags,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+
+import {
+  ApiError,
+  getCurrentUser,
+  type UserPublic,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import {
+  createAdminFitment,
+  getAdminFitments,
+  getAdminProducts,
+  updateAdminFitment,
+  type AdminFitment,
+  type AdminFitmentCreatePayload,
+  type AdminFitmentUpdatePayload,
+} from "@/lib/admin";
+
+import type {
+  Product,
+} from "@/lib/products";
+
+
+type StatusFilter =
+  | "all"
+  | "active"
+  | "inactive";
+
+
+type FitmentForm = {
+  productId: string;
+  make: string;
+  model: string;
+  yearStart: string;
+  yearEnd: string;
+  engine: string;
+  transmission: string;
+  isActive: boolean;
+};
+
+
+const PAGE_SIZE =
+  50;
+
+
+const EMPTY_FORM: FitmentForm = {
+  productId:
+    "",
+
+  make:
+    "",
+
+  model:
+    "",
+
+  yearStart:
+    "",
+
+  yearEnd:
+    "",
+
+  engine:
+    "",
+
+  transmission:
+    "",
+
+  isActive:
+    true,
+};
+
+
+export default function AdminFitmentsPage() {
+  const router =
+    useRouter();
+
+
+  const [
+    user,
+    setUser,
+  ] =
+    useState<UserPublic | null>(
+      null,
+    );
+
+
+  const [
+    fitments,
+    setFitments,
+  ] =
+    useState<AdminFitment[]>(
+      [],
+    );
+
+
+  const [
+    products,
+    setProducts,
+  ] =
+    useState<Product[]>(
+      [],
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true,
+    );
+
+
+  const [
+    saving,
+    setSaving,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    formError,
+    setFormError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    search,
+    setSearch,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState<StatusFilter>(
+      "all",
+    );
+
+
+  const [
+    productFilter,
+    setProductFilter,
+  ] =
+    useState(
+      "all",
+    );
+
+
+  const [
+    currentPage,
+    setCurrentPage,
+  ] =
+    useState(
+      1,
+    );
+
+
+  const [
+    editorOpen,
+    setEditorOpen,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    editing,
+    setEditing,
+  ] =
+    useState<AdminFitment | null>(
+      null,
+    );
+
+
+  const [
+    form,
+    setForm,
+  ] =
+    useState<FitmentForm>(
+      EMPTY_FORM,
+    );
+
+
+  useEffect(() => {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.replace(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    const accessToken =
+      token;
+
+    let cancelled =
+      false;
+
+
+    async function load() {
+      try {
+        const currentUser =
+          await getCurrentUser(
+            accessToken,
+          );
+
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+
+        if (
+          currentUser.role !==
+          "admin"
+        ) {
+          router.replace(
+            "/",
+          );
+
+          return;
+        }
+
+
+        const [
+          fitmentResult,
+          productResult,
+        ] =
+          await Promise.all(
+            [
+              getAdminFitments(
+                accessToken,
+              ),
+
+              getAdminProducts(
+                accessToken,
+              ),
+            ],
+          );
+
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+
+        setUser(
+          currentUser,
+        );
+
+        setFitments(
+          fitmentResult,
+        );
+
+        setProducts(
+          productResult,
+        );
+
+      } catch (
+        loadError
+      ) {
+        if (
+          loadError instanceof
+            ApiError &&
+          loadError.status ===
+            401
+        ) {
+          removeAccessToken();
+
+          router.replace(
+            "/login",
+          );
+
+          return;
+        }
+
+
+        if (
+          loadError instanceof
+            ApiError &&
+          loadError.status ===
+            403
+        ) {
+          router.replace(
+            "/",
+          );
+
+          return;
+        }
+
+
+        if (
+          !cancelled
+        ) {
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load fitments.",
+          );
+        }
+
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setLoading(
+            false,
+          );
+        }
+      }
+    }
+
+
+    void load();
+
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    router,
+  ]);
+
+
+  const productMap =
+    useMemo(
+      () =>
+        new Map(
+          products.map(
+            (
+              product,
+            ) => [
+              product.id,
+              product,
+            ],
+          ),
+        ),
+      [
+        products,
+      ],
+    );
+
+
+  const activeCount =
+    fitments.filter(
+      (
+        fitment,
+      ) =>
+        fitment.is_active,
+    ).length;
+
+
+  const inactiveCount =
+    fitments.length -
+    activeCount;
+
+
+  const productCount =
+    new Set(
+      fitments.map(
+        (
+          fitment,
+        ) =>
+          fitment.product_id,
+      ),
+    ).size;
+
+
+  const visibleFitments =
+    useMemo(
+      () => {
+        const needle =
+          search
+            .trim()
+            .toLowerCase();
+
+
+        return fitments.filter(
+          (
+            fitment,
+          ) => {
+            if (
+              statusFilter ===
+                "active" &&
+              !fitment.is_active
+            ) {
+              return false;
+            }
+
+
+            if (
+              statusFilter ===
+                "inactive" &&
+              fitment.is_active
+            ) {
+              return false;
+            }
+
+
+            if (
+              productFilter !==
+                "all" &&
+              fitment.product_id !==
+                productFilter
+            ) {
+              return false;
+            }
+
+
+            if (!needle) {
+              return true;
+            }
+
+
+            const product =
+              productMap.get(
+                fitment.product_id,
+              );
+
+
+            return [
+              fitment.make,
+              fitment.model,
+              fitment.engine ??
+                "",
+              fitment.transmission ??
+                "",
+              String(
+                fitment.year_start,
+              ),
+              String(
+                fitment.year_end,
+              ),
+              product?.name ??
+                "",
+              product?.sku ??
+                "",
+              product?.part_number ??
+                "",
+            ].some(
+              (
+                value,
+              ) =>
+                value
+                  .toLowerCase()
+                  .includes(
+                    needle,
+                  ),
+            );
+          },
+        );
+      },
+      [
+        fitments,
+        productFilter,
+        productMap,
+        search,
+        statusFilter,
+      ],
+    );
+
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        visibleFitments.length /
+          PAGE_SIZE,
+      ),
+    );
+
+
+  const safePage =
+    Math.min(
+      currentPage,
+      totalPages,
+    );
+
+
+  const pageFitments =
+    visibleFitments.slice(
+      (
+        safePage -
+        1
+      ) *
+        PAGE_SIZE,
+      safePage *
+        PAGE_SIZE,
+    );
+
+
+  const selectableProducts =
+    useMemo(
+      () => {
+        if (!editing) {
+          return products.filter(
+            (
+              product,
+            ) =>
+              product.is_active,
+          );
+        }
+
+
+        return products.filter(
+          (
+            product,
+          ) =>
+            product.is_active ||
+            product.id ===
+              editing.product_id,
+        );
+      },
+      [
+        products,
+        editing,
+      ],
+    );
+
+
+  const adminName =
+    user
+      ? `${user.first_name} ${user.last_name}`.trim()
+      : "Administrator";
+
+
+  function openCreate() {
+    const firstProduct =
+      products.find(
+        (
+          product,
+        ) =>
+          product.is_active,
+      );
+
+
+    setEditing(
+      null,
+    );
+
+
+    setForm(
+      {
+        ...EMPTY_FORM,
+
+        productId:
+          firstProduct?.id ??
+          "",
+      },
+    );
+
+
+    setFormError(
+      "",
+    );
+
+    setEditorOpen(
+      true,
+    );
+  }
+
+
+  function openEdit(
+    fitment: AdminFitment,
+  ) {
+    setEditing(
+      fitment,
+    );
+
+
+    setForm(
+      {
+        productId:
+          fitment.product_id,
+
+        make:
+          fitment.make,
+
+        model:
+          fitment.model,
+
+        yearStart:
+          String(
+            fitment.year_start,
+          ),
+
+        yearEnd:
+          String(
+            fitment.year_end,
+          ),
+
+        engine:
+          fitment.engine ??
+          "",
+
+        transmission:
+          fitment.transmission ??
+          "",
+
+        isActive:
+          fitment.is_active,
+      },
+    );
+
+
+    setFormError(
+      "",
+    );
+
+    setEditorOpen(
+      true,
+    );
+  }
+
+
+  function updateForm<
+    K extends keyof FitmentForm,
+  >(
+    key: K,
+    value: FitmentForm[
+      K
+    ],
+  ) {
+    setForm(
+      (
+        current,
+      ) => ({
+        ...current,
+        [key]:
+          value,
+      }),
+    );
+  }
+
+
+  async function saveFitment() {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.replace(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    const yearStart =
+      Number(
+        form.yearStart,
+      );
+
+
+    const yearEnd =
+      Number(
+        form.yearEnd,
+      );
+
+
+    if (
+      !form.productId ||
+      !form.make.trim() ||
+      !form.model.trim()
+    ) {
+      setFormError(
+        "Product, make and model are required.",
+      );
+
+      return;
+    }
+
+
+    if (
+      !Number.isInteger(
+        yearStart,
+      ) ||
+      yearStart <
+        1950 ||
+      yearStart >
+        2100
+    ) {
+      setFormError(
+        "Start year must be a whole number between 1950 and 2100.",
+      );
+
+      return;
+    }
+
+
+    if (
+      !Number.isInteger(
+        yearEnd,
+      ) ||
+      yearEnd <
+        1950 ||
+      yearEnd >
+        2100
+    ) {
+      setFormError(
+        "End year must be a whole number between 1950 and 2100.",
+      );
+
+      return;
+    }
+
+
+    if (
+      yearEnd <
+      yearStart
+    ) {
+      setFormError(
+        "End year cannot be earlier than start year.",
+      );
+
+      return;
+    }
+
+
+    setSaving(
+      true,
+    );
+
+    setFormError(
+      "",
+    );
+
+
+    try {
+      let saved:
+        AdminFitment;
+
+
+      if (editing) {
+        const payload:
+          AdminFitmentUpdatePayload =
+          {
+            make:
+              form.make.trim(),
+
+            model:
+              form.model.trim(),
+
+            year_start:
+              yearStart,
+
+            year_end:
+              yearEnd,
+
+            engine:
+              form.engine.trim() ||
+              null,
+
+            transmission:
+              form.transmission.trim() ||
+              null,
+
+            is_active:
+              form.isActive,
+          };
+
+
+        if (
+          form.productId !==
+          editing.product_id
+        ) {
+          payload.product_id =
+            form.productId;
+        }
+
+
+        saved =
+          await updateAdminFitment(
+            token,
+            editing.id,
+            payload,
+          );
+
+
+        setFitments(
+          (
+            current,
+          ) =>
+            current.map(
+              (
+                fitment,
+              ) =>
+                fitment.id ===
+                saved.id
+                  ? saved
+                  : fitment,
+            ),
+        );
+
+      } else {
+        const payload:
+          AdminFitmentCreatePayload =
+          {
+            product_id:
+              form.productId,
+
+            make:
+              form.make.trim(),
+
+            model:
+              form.model.trim(),
+
+            year_start:
+              yearStart,
+
+            year_end:
+              yearEnd,
+
+            engine:
+              form.engine.trim() ||
+              null,
+
+            transmission:
+              form.transmission.trim() ||
+              null,
+          };
+
+
+        saved =
+          await createAdminFitment(
+            token,
+            payload,
+          );
+
+
+        setFitments(
+          (
+            current,
+          ) => [
+            saved,
+            ...current,
+          ],
+        );
+      }
+
+
+      setEditorOpen(
+        false,
+      );
+
+      setEditing(
+        null,
+      );
+
+    } catch (
+      saveError
+    ) {
+      if (
+        saveError instanceof
+          ApiError &&
+        saveError.status ===
+          401
+      ) {
+        removeAccessToken();
+
+        router.replace(
+          "/login",
+        );
+
+        return;
+      }
+
+
+      setFormError(
+        saveError instanceof
+          Error
+          ? saveError.message
+          : "Unable to save fitment.",
+      );
+
+    } finally {
+      setSaving(
+        false,
+      );
+    }
+  }
+
+
+  async function toggleActive(
+    fitment: AdminFitment,
+  ) {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.replace(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    if (
+      fitment.is_active
+    ) {
+      const confirmed =
+        window.confirm(
+          `Deactivate compatibility for ${fitment.make} ${fitment.model} (${fitment.year_start}-${fitment.year_end})? This fitment will stop contributing to compatibility results.`,
+        );
+
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+
+    try {
+      const updated =
+        await updateAdminFitment(
+          token,
+          fitment.id,
+          {
+            is_active:
+              !fitment.is_active,
+          },
+        );
+
+
+      setFitments(
+        (
+          current,
+        ) =>
+          current.map(
+            (
+              item,
+            ) =>
+              item.id ===
+              updated.id
+                ? updated
+                : item,
+          ),
+      );
+
+    } catch (
+      toggleError
+    ) {
+      setError(
+        toggleError instanceof
+          Error
+          ? toggleError.message
+          : "Unable to update fitment status.",
+      );
+    }
+  }
+
+
+  return (
+    <main className="min-h-screen bg-[#f5f6f8] text-[#101828]">
+      <div className="flex min-h-screen">
+        <AdminSidebar />
+
+
+        <section className="min-w-0 flex-1">
+          <header className="flex h-[70px] items-center justify-between border-b border-[#e4e7ec] bg-white px-5 sm:px-8">
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#98a2b3]">
+                Admin Console
+              </p>
+
+              <p className="mt-1 text-[12px] font-semibold text-[#344054]">
+                {
+                  adminName
+                }
+              </p>
+            </div>
+
+
+            <Link
+              href="/"
+              className="flex items-center gap-2 rounded-[7px] border border-[#d0d5dd] bg-white px-4 py-2 text-[9px] font-semibold text-[#344054]"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+
+              Store
+            </Link>
+          </header>
+
+
+          <div className="mx-auto max-w-[1450px] p-5 sm:p-8">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <h1 className="text-[28px] font-bold tracking-[-0.035em]">
+                  Fitments
+                </h1>
+
+                <p className="mt-2 text-[11px] text-[#667085]">
+                  Manage vehicle compatibility mappings between catalog products and vehicles.
+                </p>
+              </div>
+
+
+              <button
+                type="button"
+                onClick={
+                  openCreate
+                }
+                className="flex h-10 items-center justify-center gap-2 rounded-[7px] bg-[#e31b2d] px-4 text-[9px] font-semibold text-white"
+              >
+                <Plus className="h-3.5 w-3.5" />
+
+                Add fitment
+              </button>
+            </div>
+
+
+            <section className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                label="Total fitments"
+                value={
+                  fitments.length
+                }
+              />
+
+              <MetricCard
+                label="Active"
+                value={
+                  activeCount
+                }
+              />
+
+              <MetricCard
+                label="Inactive"
+                value={
+                  inactiveCount
+                }
+              />
+
+              <MetricCard
+                label="Products covered"
+                value={
+                  productCount
+                }
+              />
+            </section>
+
+
+            {error && (
+              <div className="mt-5 rounded-[8px] border border-[#fecdca] bg-[#fff4f5] px-4 py-3 text-[10px] text-[#b42318]">
+                {
+                  error
+                }
+              </div>
+            )}
+
+
+            <div className="mt-7 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="relative w-full xl:max-w-[340px]">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#98a2b3]" />
+
+                <input
+                  value={
+                    search
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) => {
+                      setSearch(
+                        event.target.value,
+                      );
+
+                      setCurrentPage(
+                        1,
+                      );
+                    }
+                  }
+                  placeholder="Search vehicle, product, year..."
+                  className="h-10 w-full rounded-[7px] border border-[#d0d5dd] bg-white pl-9 pr-3 text-[10px] outline-none"
+                />
+              </div>
+
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <select
+                  value={
+                    productFilter
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) => {
+                      setProductFilter(
+                        event.target.value,
+                      );
+
+                      setCurrentPage(
+                        1,
+                      );
+                    }
+                  }
+                  className="h-10 max-w-[320px] rounded-[7px] border border-[#d0d5dd] bg-white px-3 text-[10px] outline-none"
+                >
+                  <option value="all">
+                    All products
+                  </option>
+
+                  {products.map(
+                    (
+                      product,
+                    ) => (
+                      <option
+                        key={
+                          product.id
+                        }
+                        value={
+                          product.id
+                        }
+                      >
+                        {
+                          product.name
+                        }{" "}
+                        —{" "}
+                        {
+                          product.sku
+                        }
+                      </option>
+                    ),
+                  )}
+                </select>
+
+
+                <select
+                  value={
+                    statusFilter
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) => {
+                      setStatusFilter(
+                        event.target.value as
+                          StatusFilter,
+                      );
+
+                      setCurrentPage(
+                        1,
+                      );
+                    }
+                  }
+                  className="h-10 rounded-[7px] border border-[#d0d5dd] bg-white px-3 text-[10px] outline-none"
+                >
+                  <option value="all">
+                    All statuses
+                  </option>
+
+                  <option value="active">
+                    Active
+                  </option>
+
+                  <option value="inactive">
+                    Inactive
+                  </option>
+                </select>
+              </div>
+            </div>
+
+
+            <div className="mt-4 overflow-hidden rounded-[14px] border border-[#dfe3e8] bg-white">
+              {loading ? (
+                <div className="space-y-3 p-5">
+                  {[
+                    1,
+                    2,
+                    3,
+                    4,
+                  ].map(
+                    (
+                      item,
+                    ) => (
+                      <div
+                        key={
+                          item
+                        }
+                        className="h-[72px] animate-pulse rounded-[8px] bg-[#f2f4f7]"
+                      />
+                    ),
+                  )}
+                </div>
+              ) : pageFitments.length ===
+                0 ? (
+                <div className="px-6 py-16 text-center">
+                  <CarFront className="mx-auto h-8 w-8 text-[#98a2b3]" />
+
+                  <p className="mt-4 text-[12px] font-semibold">
+                    No fitments found
+                  </p>
+
+                  <p className="mt-1 text-[9px] text-[#667085]">
+                    Try changing the current filters.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1150px] border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#eaecf0] bg-[#fafbfc] text-left">
+                        <TableHeading>
+                          Product
+                        </TableHeading>
+
+                        <TableHeading>
+                          Vehicle
+                        </TableHeading>
+
+                        <TableHeading>
+                          Years
+                        </TableHeading>
+
+                        <TableHeading>
+                          Engine
+                        </TableHeading>
+
+                        <TableHeading>
+                          Transmission
+                        </TableHeading>
+
+                        <TableHeading>
+                          Status
+                        </TableHeading>
+
+                        <TableHeading>
+                          Updated
+                        </TableHeading>
+
+                        <TableHeading>
+                          Actions
+                        </TableHeading>
+                      </tr>
+                    </thead>
+
+
+                    <tbody>
+                      {pageFitments.map(
+                        (
+                          fitment,
+                        ) => {
+                          const product =
+                            productMap.get(
+                              fitment.product_id,
+                            );
+
+
+                          return (
+                            <tr
+                              key={
+                                fitment.id
+                              }
+                              className="border-b border-[#eaecf0] last:border-0 hover:bg-[#fafbfc]"
+                            >
+                              <TableCell>
+                                <div className="max-w-[260px]">
+                                  <p className="truncate font-semibold text-[#101828]">
+                                    {
+                                      product?.name ??
+                                      "Unknown product"
+                                    }
+                                  </p>
+
+                                  <p className="mt-1 truncate text-[8px] text-[#98a2b3]">
+                                    {
+                                      product?.sku ??
+                                      fitment.product_id
+                                    }
+                                  </p>
+                                </div>
+                              </TableCell>
+
+
+                              <TableCell>
+                                <p className="font-semibold text-[#344054]">
+                                  {
+                                    fitment.make
+                                  }{" "}
+                                  {
+                                    fitment.model
+                                  }
+                                </p>
+                              </TableCell>
+
+
+                              <TableCell>
+                                {
+                                  fitment.year_start
+                                }
+                                {" — "}
+                                {
+                                  fitment.year_end
+                                }
+                              </TableCell>
+
+
+                              <TableCell>
+                                {
+                                  fitment.engine ??
+                                  "Any"
+                                }
+                              </TableCell>
+
+
+                              <TableCell>
+                                {
+                                  fitment.transmission ??
+                                  "Any"
+                                }
+                              </TableCell>
+
+
+                              <TableCell>
+                                <StatusBadge
+                                  active={
+                                    fitment.is_active
+                                  }
+                                />
+                              </TableCell>
+
+
+                              <TableCell>
+                                {
+                                  formatDate(
+                                    fitment.updated_at,
+                                  )
+                                }
+                              </TableCell>
+
+
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openEdit(
+                                        fitment,
+                                      )
+                                    }
+                                    className="flex h-8 items-center gap-1.5 rounded-[6px] border border-[#d0d5dd] px-2.5 text-[8px] font-semibold"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+
+                                    Edit
+                                  </button>
+
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void toggleActive(
+                                        fitment,
+                                      )
+                                    }
+                                    className={
+                                      fitment.is_active
+                                        ? "h-8 rounded-[6px] border border-[#fecdca] px-2.5 text-[8px] font-semibold text-[#b42318]"
+                                        : "h-8 rounded-[6px] border border-[#abefc6] px-2.5 text-[8px] font-semibold text-[#067647]"
+                                    }
+                                  >
+                                    {
+                                      fitment.is_active
+                                        ? "Deactivate"
+                                        : "Activate"
+                                    }
+                                  </button>
+                                </div>
+                              </TableCell>
+                            </tr>
+                          );
+                        },
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+
+            {!loading && (
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[9px] text-[#98a2b3]">
+                  Showing{" "}
+                  {
+                    pageFitments.length
+                  }{" "}
+                  of{" "}
+                  {
+                    visibleFitments.length
+                  }{" "}
+                  matching fitments ·{" "}
+                  {
+                    fitments.length
+                  }{" "}
+                  total
+                </p>
+
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={
+                      safePage <=
+                      1
+                    }
+                    onClick={() =>
+                      setCurrentPage(
+                        (
+                          page,
+                        ) =>
+                          Math.max(
+                            1,
+                            page -
+                              1,
+                          ),
+                      )
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+
+
+                  <span className="px-2 text-[9px] font-semibold text-[#475467]">
+                    {
+                      safePage
+                    }{" "}
+                    /{" "}
+                    {
+                      totalPages
+                    }
+                  </span>
+
+
+                  <button
+                    type="button"
+                    disabled={
+                      safePage >=
+                      totalPages
+                    }
+                    onClick={() =>
+                      setCurrentPage(
+                        (
+                          page,
+                        ) =>
+                          Math.min(
+                            totalPages,
+                            page +
+                              1,
+                          ),
+                      )
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white disabled:opacity-40"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+
+      {editorOpen && (
+        <FitmentEditor
+          form={
+            form
+          }
+          editing={
+            editing
+          }
+          products={
+            selectableProducts
+          }
+          saving={
+            saving
+          }
+          error={
+            formError
+          }
+          onChange={
+            updateForm
+          }
+          onClose={() => {
+            if (
+              saving
+            ) {
+              return;
+            }
+
+
+            setEditorOpen(
+              false,
+            );
+
+            setEditing(
+              null,
+            );
+          }}
+          onSave={() =>
+            void saveFitment()
+          }
+        />
+      )}
+    </main>
+  );
+}
+
+
+function FitmentEditor({
+  form,
+  editing,
+  products,
+  saving,
+  error,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  form:
+    FitmentForm;
+
+  editing:
+    AdminFitment | null;
+
+  products:
+    Product[];
+
+  saving:
+    boolean;
+
+  error:
+    string;
+
+  onChange:
+    <
+      K extends keyof FitmentForm,
+    >(
+      key: K,
+      value: FitmentForm[
+        K
+      ],
+    ) => void;
+
+  onClose:
+    () => void;
+
+  onSave:
+    () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
+      <button
+        type="button"
+        aria-label="Close fitment editor"
+        onClick={
+          onClose
+        }
+        className="absolute inset-0"
+      />
+
+
+      <aside className="relative z-10 h-full w-full max-w-[620px] overflow-y-auto bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#eaecf0] bg-white px-6 py-5">
+          <div>
+            <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[#98a2b3]">
+              Compatibility management
+            </p>
+
+            <h2 className="mt-1 text-[20px] font-bold">
+              {
+                editing
+                  ? "Edit fitment"
+                  : "Add fitment"
+              }
+            </h2>
+          </div>
+
+
+          <button
+            type="button"
+            disabled={
+              saving
+            }
+            onClick={
+              onClose
+            }
+            className="flex h-9 w-9 items-center justify-center rounded-[7px] border border-[#eaecf0] disabled:opacity-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+
+        <div className="space-y-6 p-6">
+          {error && (
+            <div className="rounded-[8px] border border-[#fecdca] bg-[#fff4f5] px-4 py-3 text-[10px] text-[#b42318]">
+              {
+                error
+              }
+            </div>
+          )}
+
+
+          <FormSection
+            title="Product"
+          >
+            <Field
+              label="Catalog product"
+              required
+            >
+              <select
+                value={
+                  form.productId
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    onChange(
+                      "productId",
+                      event.target.value,
+                    )
+                }
+                className={inputClass}
+              >
+                <option value="">
+                  Select product
+                </option>
+
+                {products.map(
+                  (
+                    product,
+                  ) => (
+                    <option
+                      key={
+                        product.id
+                      }
+                      value={
+                        product.id
+                      }
+                    >
+                      {
+                        product.name
+                      }
+                      {" — "}
+                      {
+                        product.sku
+                      }
+                      {
+                        !product.is_active
+                          ? " (Inactive)"
+                          : ""
+                      }
+                    </option>
+                  ),
+                )}
+              </select>
+            </Field>
+          </FormSection>
+
+
+          <FormSection
+            title="Vehicle"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Make"
+                required
+              >
+                <input
+                  value={
+                    form.make
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "make",
+                        event.target.value,
+                      )
+                  }
+                  placeholder="Honda"
+                  className={inputClass}
+                />
+              </Field>
+
+
+              <Field
+                label="Model"
+                required
+              >
+                <input
+                  value={
+                    form.model
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "model",
+                        event.target.value,
+                      )
+                  }
+                  placeholder="CR-V"
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+
+          <FormSection
+            title="Model years"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Start year"
+                required
+              >
+                <input
+                  type="number"
+                  min="1950"
+                  max="2100"
+                  step="1"
+                  value={
+                    form.yearStart
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "yearStart",
+                        event.target.value,
+                      )
+                  }
+                  className={inputClass}
+                />
+              </Field>
+
+
+              <Field
+                label="End year"
+                required
+              >
+                <input
+                  type="number"
+                  min="1950"
+                  max="2100"
+                  step="1"
+                  value={
+                    form.yearEnd
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "yearEnd",
+                        event.target.value,
+                      )
+                  }
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+
+          <FormSection
+            title="Optional matching"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Engine"
+                hint="Leave empty when the fitment applies to any engine."
+              >
+                <input
+                  value={
+                    form.engine
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "engine",
+                        event.target.value,
+                      )
+                  }
+                  placeholder="2.4L"
+                  className={inputClass}
+                />
+              </Field>
+
+
+              <Field
+                label="Transmission"
+                hint="Leave empty when the fitment applies to any transmission."
+              >
+                <input
+                  value={
+                    form.transmission
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "transmission",
+                        event.target.value,
+                      )
+                  }
+                  placeholder="Automatic"
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+
+          {editing && (
+            <FormSection
+              title="Availability"
+            >
+              <label className="flex h-11 items-center gap-3 rounded-[7px] border border-[#d0d5dd] px-3">
+                <input
+                  type="checkbox"
+                  checked={
+                    form.isActive
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "isActive",
+                        event.target.checked,
+                      )
+                  }
+                />
+
+                <span className="text-[10px] font-medium text-[#344054]">
+                  Active compatibility mapping
+                </span>
+              </label>
+            </FormSection>
+          )}
+        </div>
+
+
+        <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-[#eaecf0] bg-white px-6 py-4">
+          <button
+            type="button"
+            disabled={
+              saving
+            }
+            onClick={
+              onClose
+            }
+            className="h-10 rounded-[7px] border border-[#d0d5dd] px-4 text-[9px] font-semibold text-[#344054] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+
+          <button
+            type="button"
+            disabled={
+              saving
+            }
+            onClick={
+              onSave
+            }
+            className="h-10 rounded-[7px] bg-[#e31b2d] px-5 text-[9px] font-semibold text-white disabled:opacity-50"
+          >
+            {
+              saving
+                ? "Saving..."
+                : editing
+                  ? "Save changes"
+                  : "Create fitment"
+            }
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+
+function AdminSidebar() {
+  return (
+    <aside className="hidden w-[230px] shrink-0 bg-[#071523] text-white lg:flex lg:flex-col">
+      <div className="border-b border-white/10 px-6 py-6">
+        <Link
+          href="/admin"
+          className="flex items-center gap-3"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-[7px] bg-[#ef3d43] text-[18px] font-black italic">
+            V
+          </div>
+
+          <div>
+            <div className="text-[14px] font-bold">
+              VEHNEXA
+            </div>
+
+            <div className="text-[8px] font-semibold tracking-[0.18em] text-[#98a2b3]">
+              ADMIN CONSOLE
+            </div>
+          </div>
+        </Link>
+      </div>
+
+
+      <nav className="flex-1 space-y-1 px-3 py-5">
+        <Nav
+          href="/admin"
+          icon={LayoutDashboard}
+          label="Overview"
+        />
+
+        <Nav
+          href="/admin/products"
+          icon={Package}
+          label="Products"
+        />
+
+        <Nav
+          href="/admin/categories"
+          icon={Shapes}
+          label="Categories"
+        />
+
+        <Nav
+          href="/admin/brands"
+          icon={Tags}
+          label="Brands"
+        />
+
+        <Nav
+          href="/admin/fitments"
+          icon={CarFront}
+          label="Fitments"
+          active
+        />
+
+        <Nav
+          href="/admin/orders"
+          icon={ShoppingBag}
+          label="Orders"
+        />
+
+        <Nav
+          href="/admin/users"
+icon={Users}
+          label="Users"
+        />
+
+        <Nav href="/admin/reviews"
+          icon={Star}
+          label="Reviews"
+        />
+
+        <Nav href="/admin/ai-sessions"
+          icon={Bot}
+          label="AI Sessions"
+        />
+
+        <Nav
+          icon={Bell}
+          label="Notifications"
+        />
+      </nav>
+    </aside>
+  );
+}
+
+
+function Nav({
+  href,
+  icon:
+    Icon,
+  label,
+  active =
+    false,
+}: {
+  href?:
+    string;
+
+  icon:
+    LucideIcon;
+
+  label:
+    string;
+
+  active?:
+    boolean;
+}) {
+  const className =
+    active
+      ? "flex h-10 items-center gap-3 rounded-[7px] bg-white/10 px-3 text-[9px] font-semibold text-white"
+      : "flex h-10 items-center gap-3 rounded-[7px] px-3 text-[9px] font-medium text-[#98a2b3] hover:bg-white/5 hover:text-white";
+
+
+  const content = (
+    <>
+      <Icon className="h-4 w-4" />
+
+      {
+        label
+      }
+    </>
+  );
+
+
+  if (href) {
+    return (
+      <Link
+        href={
+          href
+        }
+        className={
+          className
+        }
+      >
+        {
+          content
+        }
+      </Link>
+    );
+  }
+
+
+  return (
+    <div
+      className={
+        className
+      }
+    >
+      {
+        content
+      }
+    </div>
+  );
+}
+
+
+function MetricCard({
+  label,
+  value,
+}: {
+  label:
+    string;
+
+  value:
+    number;
+}) {
+  return (
+    <div className="rounded-[12px] border border-[#dfe3e8] bg-white p-5">
+      <p className="text-[8px] font-semibold uppercase tracking-[0.1em] text-[#98a2b3]">
+        {
+          label
+        }
+      </p>
+
+      <p className="mt-2 text-[23px] font-bold text-[#101828]">
+        {
+          value.toLocaleString()
+        }
+      </p>
+    </div>
+  );
+}
+
+
+function TableHeading({
+  children,
+}: {
+  children:
+    ReactNode;
+}) {
+  return (
+    <th className="px-5 py-3 text-[8px] font-semibold uppercase tracking-[0.1em] text-[#98a2b3]">
+      {
+        children
+      }
+    </th>
+  );
+}
+
+
+function TableCell({
+  children,
+}: {
+  children:
+    ReactNode;
+}) {
+  return (
+    <td className="px-5 py-4 text-[9px] text-[#475467]">
+      {
+        children
+      }
+    </td>
+  );
+}
+
+
+function StatusBadge({
+  active,
+}: {
+  active:
+    boolean;
+}) {
+  return (
+    <span
+      className={
+        active
+          ? "inline-flex rounded-full border border-[#abefc6] bg-[#ecfdf3] px-2.5 py-1 text-[8px] font-semibold text-[#067647]"
+          : "inline-flex rounded-full border border-[#d0d5dd] bg-[#f2f4f7] px-2.5 py-1 text-[8px] font-semibold text-[#667085]"
+      }
+    >
+      {
+        active
+          ? "Active"
+          : "Inactive"
+      }
+    </span>
+  );
+}
+
+
+function FormSection({
+  title,
+  children,
+}: {
+  title:
+    string;
+
+  children:
+    ReactNode;
+}) {
+  return (
+    <section>
+      <h3 className="mb-3 text-[9px] font-semibold uppercase tracking-[0.1em] text-[#667085]">
+        {
+          title
+        }
+      </h3>
+
+      {
+        children
+      }
+    </section>
+  );
+}
+
+
+function Field({
+  label,
+  hint,
+  required =
+    false,
+  children,
+}: {
+  label:
+    string;
+
+  hint?:
+    string;
+
+  required?:
+    boolean;
+
+  children:
+    ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[9px] font-semibold text-[#344054]">
+        {
+          label
+        }
+
+        {required && (
+          <span className="text-[#e31b2d]">
+            {" "}
+            *
+          </span>
+        )}
+      </span>
+
+
+      {
+        children
+      }
+
+
+      {hint && (
+        <span className="mt-1.5 block text-[8px] leading-4 text-[#98a2b3]">
+          {
+            hint
+          }
+        </span>
+      )}
+    </label>
+  );
+}
+
+
+const inputClass =
+  "h-10 w-full rounded-[7px] border border-[#d0d5dd] bg-white px-3 text-[10px] text-[#101828] outline-none focus:border-[#98a2b3]";
+
+
+function formatDate(
+  value: string | null,
+) {
+  if (!value) {
+    return "—";
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "2-digit",
+
+      year:
+        "numeric",
+    },
+  ).format(
+    new Date(
+      value,
+    ),
+  );
+}

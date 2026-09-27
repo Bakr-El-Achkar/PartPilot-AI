@@ -1,0 +1,2615 @@
+﻿
+
+============================================================
+FILE: .\app\account\garage\add\page.tsx
+============================================================
+
+"use client";
+
+import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
+
+import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
+
+import Link from "next/link";
+import {
+  FormEvent,
+  useEffect,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
+
+import {
+  ArrowLeft,
+  CarFront,
+  CheckCircle2,
+  ChevronDown,
+  Loader2,
+  Plus,
+  Search,
+  ShoppingCart,
+  Sparkles,
+  UserRound,
+} from "lucide-react";
+
+import { ApiError } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
+
+import {
+  createVehicle,
+  getVehiclePreview,
+} from "@/lib/vehicles";
+
+import {
+  getVehicleMakes,
+  getVehicleModels,
+  getVehicleOptions,
+  getVehicleYears,
+} from "@/lib/vehicleCatalog";
+
+type FormState = {
+  year: string;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname: string;
+};
+
+const initialState: FormState = {
+  year: "",
+  make: "",
+  model: "",
+  engine: "",
+  transmission: "",
+  nickname: "",
+};
+
+export default function AddVehiclePage() {
+  const router = useRouter();
+
+  const [form, setForm] =
+    useState<FormState>(initialState);
+
+  const [makes, setMakes] =
+    useState<string[]>([]);
+
+  const [models, setModels] =
+    useState<string[]>([]);
+
+  const [years, setYears] =
+    useState<number[]>([]);
+
+  const [engines, setEngines] =
+    useState<string[]>([]);
+
+  const [
+    transmissions,
+    setTransmissions,
+  ] = useState<string[]>([]);
+
+  const [
+    catalogLoading,
+    setCatalogLoading,
+  ] = useState(true);
+
+  const [
+    modelsLoading,
+    setModelsLoading,
+  ] = useState(false);
+
+  const [
+    yearsLoading,
+    setYearsLoading,
+  ] = useState(false);
+
+  const [
+    optionsLoading,
+    setOptionsLoading,
+  ] = useState(false);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [
+    previewLoading,
+    setPreviewLoading,
+  ] = useState(false);
+
+  const [
+    previewImage,
+    setPreviewImage,
+  ] = useState<string | null>(null);
+
+  const [
+    previewMessage,
+    setPreviewMessage,
+  ] = useState(
+    "Select your vehicle to load a preview.",
+  );
+
+  /*
+   * ==================================================
+   * LOAD VEHICLE MAKES
+   * ==================================================
+   */
+
+  useEffect(() => {
+    const token =
+      getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadMakes() {
+      try {
+        setCatalogLoading(true);
+
+        const result =
+          await getVehicleMakes();
+
+        if (!cancelled) {
+          setMakes(result);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof ApiError
+              ? err.message
+              : "Unable to load the vehicle catalog.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setCatalogLoading(false);
+        }
+      }
+    }
+
+    void loadMakes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  /*
+   * ==================================================
+   * VEHICLE IMAGE PREVIEW
+   * ==================================================
+   */
+
+  useEffect(() => {
+    const year =
+      Number(form.year);
+
+    if (
+      !form.make ||
+      !form.model ||
+      !Number.isInteger(year)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const timeout =
+      window.setTimeout(
+        async () => {
+          const token =
+            getAccessToken();
+
+          if (!token) {
+            return;
+          }
+
+          try {
+            setPreviewLoading(
+              true,
+            );
+
+            setPreviewMessage(
+              "Identifying your vehicle...",
+            );
+
+            const result =
+              await getVehiclePreview(
+                token,
+                year,
+                form.make,
+                form.model,
+              );
+
+            if (cancelled) {
+              return;
+            }
+
+            if (
+              result.found &&
+              result.image_url
+            ) {
+              setPreviewImage(
+                result.image_url,
+              );
+
+              setPreviewMessage(
+                "Vehicle matched successfully.",
+              );
+            } else {
+              setPreviewImage(
+                null,
+              );
+
+              setPreviewMessage(
+                result.message ??
+                  "No exact vehicle image was found.",
+              );
+            }
+          } catch (err) {
+            if (cancelled) {
+              return;
+            }
+
+            console.error(
+              "Vehicle preview error:",
+              err,
+            );
+
+            setPreviewImage(
+              null,
+            );
+
+            setPreviewMessage(
+              "Vehicle preview is temporarily unavailable.",
+            );
+          } finally {
+            if (!cancelled) {
+              setPreviewLoading(
+                false,
+              );
+            }
+          }
+        },
+        500,
+      );
+
+    return () => {
+      cancelled = true;
+
+      window.clearTimeout(
+        timeout,
+      );
+    };
+  }, [
+    form.year,
+    form.make,
+    form.model,
+  ]);
+
+  /*
+   * ==================================================
+   * MAKE
+   * ==================================================
+   */
+
+  async function handleMakeChange(
+    make: string,
+  ) {
+    setError("");
+
+    setForm((current) => ({
+      ...current,
+      make,
+      model: "",
+      year: "",
+      engine: "",
+      transmission: "",
+    }));
+
+    setModels([]);
+    setYears([]);
+    setEngines([]);
+    setTransmissions([]);
+
+    resetPreview();
+
+    if (!make) {
+      return;
+    }
+
+    try {
+      setModelsLoading(true);
+
+      const result =
+        await getVehicleModels(
+          make,
+        );
+
+      setModels(result);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to load vehicle models.",
+      );
+    } finally {
+      setModelsLoading(false);
+    }
+  }
+
+  /*
+   * ==================================================
+   * MODEL
+   * ==================================================
+   */
+
+  async function handleModelChange(
+    model: string,
+  ) {
+    setError("");
+
+    setForm((current) => ({
+      ...current,
+      model,
+      year: "",
+      engine: "",
+      transmission: "",
+    }));
+
+    setYears([]);
+    setEngines([]);
+    setTransmissions([]);
+
+    setPreviewImage(null);
+    setPreviewLoading(false);
+
+    setPreviewMessage(
+      model
+        ? "Select a model year to continue."
+        : "Select your vehicle to load a preview.",
+    );
+
+    if (
+      !form.make ||
+      !model
+    ) {
+      return;
+    }
+
+    try {
+      setYearsLoading(true);
+
+      const result =
+        await getVehicleYears(
+          form.make,
+          model,
+        );
+
+      setYears(result);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to load model years.",
+      );
+    } finally {
+      setYearsLoading(false);
+    }
+  }
+
+  /*
+   * ==================================================
+   * YEAR
+   * ==================================================
+   */
+
+  async function handleYearChange(
+    yearValue: string,
+  ) {
+    setError("");
+
+    setForm((current) => ({
+      ...current,
+      year: yearValue,
+      engine: "",
+      transmission: "",
+    }));
+
+    setEngines([]);
+    setTransmissions([]);
+
+    setPreviewImage(null);
+    setPreviewLoading(false);
+
+    if (!yearValue) {
+      setPreviewMessage(
+        "Select your vehicle to load a preview.",
+      );
+
+      return;
+    }
+
+    setPreviewMessage(
+      "Preparing vehicle preview...",
+    );
+
+    if (
+      !form.make ||
+      !form.model
+    ) {
+      return;
+    }
+
+    const year =
+      Number(yearValue);
+
+    if (
+      !Number.isInteger(year)
+    ) {
+      return;
+    }
+
+    try {
+      setOptionsLoading(true);
+
+      const result =
+        await getVehicleOptions(
+          form.make,
+          form.model,
+          year,
+        );
+
+      setEngines(
+        result.engines,
+      );
+
+      setTransmissions(
+        result.transmissions,
+      );
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to load vehicle specifications.",
+      );
+    } finally {
+      setOptionsLoading(false);
+    }
+  }
+
+  /*
+   * ==================================================
+   * SIMPLE FIELDS
+   * ==================================================
+   */
+
+  function updateField(
+    field:
+      | "engine"
+      | "transmission"
+      | "nickname",
+    value: string,
+  ) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function resetPreview() {
+    setPreviewImage(null);
+    setPreviewLoading(false);
+
+    setPreviewMessage(
+      "Select your vehicle to load a preview.",
+    );
+  }
+
+  /*
+   * ==================================================
+   * SUBMIT
+   * ==================================================
+   */
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    setError("");
+
+    const year =
+      Number(form.year);
+
+    if (
+      !form.make ||
+      !form.model ||
+      !form.year ||
+      !form.engine ||
+      !form.transmission
+    ) {
+      setError(
+        "Please complete all required vehicle details.",
+      );
+
+      return;
+    }
+
+    if (
+      !Number.isInteger(year) ||
+      year < 1950 ||
+      year > 2100
+    ) {
+      setError(
+        "Please select a valid model year.",
+      );
+
+      return;
+    }
+
+    const token =
+      getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      await createVehicle(
+        token,
+        {
+          year,
+          make: form.make,
+          model: form.model,
+          engine: form.engine,
+          transmission:
+            form.transmission,
+          nickname:
+            form.nickname.trim() ||
+            undefined,
+          image_url:
+            previewImage ||
+            undefined,
+        },
+      );
+
+      router.push(
+        "/account/garage",
+      );
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.status === 401 ||
+          err.status === 403)
+      ) {
+        router.replace(
+          "/login",
+        );
+
+        return;
+      }
+
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to add vehicle.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const formComplete =
+    Boolean(
+      form.make &&
+        form.model &&
+        form.year &&
+        form.engine &&
+        form.transmission,
+    );
+
+  return (
+    <main className="min-h-screen bg-[#f5f7fa] text-[#0b1f33]">
+      <VehnexaNavbar />
+
+      <section className="mx-auto max-w-[1320px] px-4 pb-16 pt-7 sm:px-6 lg:px-8">
+        {/* BACK */}
+
+        <Link
+          href="/account/garage"
+          className="inline-flex items-center gap-2 text-[11px] font-medium text-[#667085] transition hover:text-[#e31b2d]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+
+          Back to My Garage
+        </Link>
+
+        {/* PAGE HEADING */}
+
+        <div className="mt-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#e31b2d]">
+              MY GARAGE
+            </p>
+
+            <h1 className="mt-4 text-[36px] font-bold leading-none tracking-[-0.045em] text-[#081b31]">
+              Add a vehicle
+            </h1>
+
+            <p className="mt-5 max-w-[670px] text-[12px] leading-6 text-[#52627a]">
+              Select your vehicle
+              details. Vehnexa will
+              use this vehicle for
+              marketplace
+              compatibility and AI
+              Mechanic context.
+            </p>
+          </div>
+
+          <div className="flex h-10 w-fit items-center gap-2 rounded-[6px] border border-[#dfe4ea] bg-white px-4 text-[10px] font-medium text-[#52627a]">
+            <Sparkles className="h-4 w-4 text-[#e31b2d]" />
+
+            Smart vehicle matching
+          </div>
+        </div>
+
+        {/* ERROR */}
+
+        {error && (
+          <div className="mt-6 rounded-[6px] border border-[#f5c2c7] bg-[#fff5f6] px-4 py-3 text-[11px] text-[#b42318]">
+            {error}
+          </div>
+        )}
+
+        {/* MAIN CONTENT */}
+
+        <div className="mt-10 grid gap-7 xl:grid-cols-[minmax(0,1.95fr)_minmax(330px,1fr)]">
+          {/* LEFT FORM */}
+
+          <form
+            onSubmit={
+              handleSubmit
+            }
+            className="overflow-hidden rounded-[10px] border border-[#dce2e9] bg-white"
+          >
+            {/* HEADER */}
+
+            <div className="flex items-start gap-4 border-b border-[#e7eaee] px-8 py-6">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[9px] bg-[#fff0f1]">
+                <CarFront className="h-5 w-5 text-[#e31b2d]" />
+              </div>
+
+              <div>
+                <h2 className="text-[15px] font-bold text-[#0b1f33]">
+                  Vehicle details
+                </h2>
+
+                <p className="mt-2 text-[11px] leading-5 text-[#667085]">
+                  Choose each option
+                  in order so Vehnexa
+                  can build the correct
+                  vehicle profile.
+                </p>
+              </div>
+            </div>
+
+            {/* FORM CONTENT */}
+
+            <div className="px-8 py-8">
+              <div className="grid gap-x-5 gap-y-5 md:grid-cols-2">
+                <SelectField
+                  label="Make"
+                  value={
+                    form.make
+                  }
+                  placeholder={
+                    catalogLoading
+                      ? "Loading makes..."
+                      : "Select make"
+                  }
+                  options={
+                    makes
+                  }
+                  disabled={
+                    catalogLoading
+                  }
+                  onChange={(
+                    value,
+                  ) => {
+                    void handleMakeChange(
+                      value,
+                    );
+                  }}
+                />
+
+                <SelectField
+                  label="Model"
+                  value={
+                    form.model
+                  }
+                  placeholder={
+                    !form.make
+                      ? "Select make first"
+                      : modelsLoading
+                        ? "Loading models..."
+                        : "Select model"
+                  }
+                  options={
+                    models
+                  }
+                  disabled={
+                    !form.make ||
+                    modelsLoading
+                  }
+                  onChange={(
+                    value,
+                  ) => {
+                    void handleModelChange(
+                      value,
+                    );
+                  }}
+                />
+
+                <SelectField
+                  label="Model year"
+                  value={
+                    form.year
+                  }
+                  placeholder={
+                    !form.model
+                      ? "Select model first"
+                      : yearsLoading
+                        ? "Loading years..."
+                        : "Select model year"
+                  }
+                  options={years.map(
+                    String,
+                  )}
+                  disabled={
+                    !form.model ||
+                    yearsLoading
+                  }
+                  onChange={(
+                    value,
+                  ) => {
+                    void handleYearChange(
+                      value,
+                    );
+                  }}
+                />
+
+                <SelectField
+                  label="Engine"
+                  value={
+                    form.engine
+                  }
+                  placeholder={
+                    !form.year
+                      ? "Select year first"
+                      : optionsLoading
+                        ? "Loading engines..."
+                        : engines.length
+                          ? "Select engine"
+                          : "No engines available"
+                  }
+                  options={
+                    engines
+                  }
+                  disabled={
+                    !form.year ||
+                    optionsLoading ||
+                    engines.length ===
+                      0
+                  }
+                  onChange={(
+                    value,
+                  ) =>
+                    updateField(
+                      "engine",
+                      value,
+                    )
+                  }
+                />
+
+                <SelectField
+                  label="Transmission"
+                  value={
+                    form.transmission
+                  }
+                  placeholder={
+                    !form.year
+                      ? "Select year first"
+                      : optionsLoading
+                        ? "Loading transmissions..."
+                        : transmissions.length
+                          ? "Select transmission"
+                          : "No transmissions available"
+                  }
+                  options={
+                    transmissions
+                  }
+                  disabled={
+                    !form.year ||
+                    optionsLoading ||
+                    transmissions.length ===
+                      0
+                  }
+                  onChange={(
+                    value,
+                  ) =>
+                    updateField(
+                      "transmission",
+                      value,
+                    )
+                  }
+                />
+
+                <TextField
+                  label="Nickname"
+                  optional
+                  value={
+                    form.nickname
+                  }
+                  placeholder="Daily Driver"
+                  onChange={(
+                    value,
+                  ) =>
+                    updateField(
+                      "nickname",
+                      value,
+                    )
+                  }
+                />
+              </div>
+
+              {/* COMPATIBILITY */}
+
+              <div className="mt-7 flex gap-3 rounded-[7px] border border-[#dfe4ea] bg-[#f8fafc] px-5 py-4">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#159b70]" />
+
+                <div>
+                  <p className="text-[11px] font-bold text-[#223248]">
+                    Compatibility profile
+                  </p>
+
+                  <p className="mt-1 text-[10px] leading-5 text-[#667085]">
+                    Make, model,
+                    year, engine and
+                    transmission will
+                    be used by Vehnexa
+                    when checking
+                    marketplace
+                    compatibility.
+                  </p>
+                </div>
+              </div>
+
+              {/* ACTIONS */}
+
+              <div className="mt-6 flex items-center justify-end gap-3 border-t border-[#e7eaee] pt-5">
+                <Link
+                  href="/account/garage"
+                  className="flex h-10 items-center justify-center rounded-[6px] border border-[#ccd3dc] bg-white px-6 text-[11px] font-semibold text-[#26374d] transition hover:bg-[#f8fafc]"
+                >
+                  Cancel
+                </Link>
+
+                <button
+                  type="submit"
+                  disabled={
+                    loading ||
+                    !formComplete
+                  }
+                  className="flex h-10 items-center justify-center gap-2 rounded-[6px] bg-[#e31b2d] px-6 text-[11px] font-semibold text-white transition hover:bg-[#c81727] disabled:cursor-not-allowed disabled:opacity-80"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+
+                  {loading
+                    ? "Adding..."
+                    : "Add vehicle"}
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {/* RIGHT PREVIEW */}
+
+          <aside className="self-start overflow-hidden rounded-[10px] border border-[#dce2e9] bg-white">
+            <div className="flex items-center justify-between px-6 py-5">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#159b70]">
+                  VEHICLE PREVIEW
+                </p>
+
+                <h2 className="mt-2 text-[15px] font-bold text-[#0b1f33]">
+                  Your vehicle
+                </h2>
+              </div>
+
+              <CarFront className="h-4 w-4 text-[#98a2b3]" />
+            </div>
+
+            {/* PREVIEW IMAGE */}
+
+            <div className="flex h-[285px] flex-col items-center justify-center border-y border-[#e7eaee] bg-[#f1f4f7] px-6 text-center">
+              {previewLoading ? (
+                <>
+                  <Loader2 className="h-8 w-8 animate-spin text-[#e31b2d]" />
+
+                  <p className="mt-5 text-[11px] text-[#667085]">
+                    Identifying your
+                    vehicle...
+                  </p>
+                </>
+              ) : previewImage ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={
+                      previewImage
+                    }
+                    alt={`${form.year} ${form.make} ${form.model}`}
+                    className="h-[195px] w-full object-contain"
+                  />
+
+                  <div className="mt-3 flex items-center gap-1.5 text-[9px] font-semibold text-[#159b70]">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+
+                    Vehicle matched
+                  </div>
+                </>
+              ) : (
+                <>
+                  <VehiclePlaceholder />
+
+                  <p className="mt-6 text-[11px] text-[#52627a]">
+                    {previewMessage}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* VEHICLE DETAILS */}
+
+            <div className="px-6 py-5">
+              <PreviewLine
+                label="Make"
+                value={
+                  form.make ||
+                  "Not selected"
+                }
+              />
+
+              <PreviewLine
+                label="Model"
+                value={
+                  form.model ||
+                  "Not selected"
+                }
+              />
+
+              <PreviewLine
+                label="Year"
+                value={
+                  form.year ||
+                  "Not selected"
+                }
+              />
+
+              <div className="my-4 h-px bg-[#e7eaee]" />
+
+              <PreviewLine
+                label="Engine"
+                value={
+                  form.engine ||
+                  "Not selected"
+                }
+              />
+
+              <PreviewLine
+                label="Transmission"
+                value={
+                  form.transmission ||
+                  "Not selected"
+                }
+              />
+
+              <PreviewLine
+                label="Nickname"
+                value={
+                  form.nickname ||
+                  "Optional"
+                }
+              />
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+/*
+ * ==================================================
+ * NAVBAR
+ * ==================================================
+ */
+
+function VehnexaNavbar() {
+  return (
+    <header className="border-b border-[#163047] bg-[#071b2d]">
+      <div className="mx-auto flex h-[62px] max-w-[1320px] items-center px-4 sm:px-6 lg:px-8">
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2.5"
+        >
+          <VehnexaMark />
+
+          <span className="text-[14px] font-bold tracking-[-0.025em] text-white">
+            Vehnexa
+          </span>
+        </Link>
+
+        <nav className="ml-9 hidden h-full items-center gap-7 lg:flex">
+          <TopNavLink
+            href="/shop"
+            label="Shop"
+          />
+
+          <TopNavLink
+            href="/account/garage"
+            label="My Garage"
+            active
+          />
+
+          <TopNavLink
+            href="/ai-mechanic"
+            label="AI Mechanic"
+          />
+
+          <TopNavLink
+            href="#resources"
+            label="Resources"
+          />
+        </nav>
+
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Search"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-[#c4ced7] transition hover:bg-white/5 hover:text-white"
+          >
+            <Search className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            aria-label="Shopping cart"
+            className="relative flex h-9 w-9 items-center justify-center rounded-md text-[#c4ced7] transition hover:bg-white/5 hover:text-white"
+          >
+            <ShoppingCart className="h-4 w-4" />
+
+            <span className="absolute right-[7px] top-[7px] h-1.5 w-1.5 rounded-full bg-[#e31b2d]" />
+          </button>
+
+          <NavbarNotificationBell />
+
+          <Link
+            href="/account"
+            aria-label="Account"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-[#c4ced7] transition hover:bg-white/5 hover:text-white"
+          >
+            <UserRound className="h-4 w-4" />
+          </Link>
+
+          <CustomerLogoutButton />
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/*
+ * ==================================================
+ * LOGO
+ * ==================================================
+ */
+
+function VehnexaMark() {
+  return (
+    <div className="relative h-7 w-7 shrink-0">
+      <span className="absolute left-[1px] top-[3px] block h-[22px] w-[10px] -skew-x-[25deg] rounded-[2px] bg-[#e31b2d]" />
+
+      <span className="absolute right-[2px] top-[3px] block h-[22px] w-[10px] skew-x-[25deg] rounded-[2px] bg-[#d8dee5]" />
+    </div>
+  );
+}
+
+/*
+ * ==================================================
+ * NAV LINK
+ * ==================================================
+ */
+
+function TopNavLink({
+  href,
+  label,
+  active = false,
+}: {
+  href: string;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`relative flex h-full items-center text-[10px] font-medium transition ${
+        active
+          ? "text-white"
+          : "text-[#b9c5d0] hover:text-white"
+      }`}
+    >
+      {label}
+
+      {active && (
+        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#e31b2d]" />
+      )}
+    </Link>
+  );
+}
+
+/*
+ * ==================================================
+ * SELECT FIELD
+ * ==================================================
+ */
+
+function SelectField({
+  label,
+  value,
+  placeholder,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  options: string[];
+  disabled?: boolean;
+  onChange: (
+    value: string,
+  ) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[11px] font-medium text-[#15263c]">
+        {label}
+      </span>
+
+      <div className="relative">
+        <select
+          required
+          value={value}
+          disabled={disabled}
+          onChange={(event) =>
+            onChange(
+              event.target.value,
+            )
+          }
+          className="h-12 w-full appearance-none rounded-[7px] border border-[#ccd4de] bg-white px-4 pr-10 text-[11px] text-[#0b1f33] outline-none transition focus:border-[#e31b2d] focus:ring-2 focus:ring-[#e31b2d]/10 disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:text-[#98a2b3]"
+        >
+          <option value="">
+            {placeholder}
+          </option>
+
+          {options.map(
+            (option) => (
+              <option
+                key={option}
+                value={option}
+              >
+                {option}
+              </option>
+            ),
+          )}
+        </select>
+
+        <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
+      </div>
+    </label>
+  );
+}
+
+/*
+ * ==================================================
+ * TEXT FIELD
+ * ==================================================
+ */
+
+function TextField({
+  label,
+  optional = false,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  optional?: boolean;
+  value: string;
+  placeholder: string;
+  onChange: (
+    value: string,
+  ) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[11px] font-medium text-[#15263c]">
+        {label}
+
+        {optional && (
+          <span className="ml-1 font-normal text-[#98a2b3]">
+            (optional)
+          </span>
+        )}
+      </span>
+
+      <input
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        maxLength={50}
+        onChange={(event) =>
+          onChange(
+            event.target.value,
+          )
+        }
+        className="h-12 w-full rounded-[7px] border border-[#ccd4de] bg-white px-4 text-[11px] text-[#0b1f33] outline-none transition placeholder:text-[#98a2b3] focus:border-[#e31b2d] focus:ring-2 focus:ring-[#e31b2d]/10"
+      />
+    </label>
+  );
+}
+
+/*
+ * ==================================================
+ * PREVIEW LINE
+ * ==================================================
+ */
+
+function PreviewLine({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex min-h-8 items-center justify-between gap-5">
+      <span className="text-[10px] text-[#667085]">
+        {label}
+      </span>
+
+      <span className="max-w-[190px] truncate text-right text-[10px] font-bold text-[#15263c]">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/*
+ * ==================================================
+ * VEHICLE PLACEHOLDER
+ * ==================================================
+ */
+
+function VehiclePlaceholder() {
+  return (
+    <svg
+      viewBox="0 0 240 120"
+      className="w-[130px] text-[#adb8c6]"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M43 75H197L178 54L154 34H87L64 57L43 75Z"
+        stroke="currentColor"
+        strokeWidth="7"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d="M87 35L69 70M154 35L185 70"
+        stroke="currentColor"
+        strokeWidth="5"
+      />
+
+      <circle
+        cx="73"
+        cy="81"
+        r="23"
+        fill="#f1f4f7"
+        stroke="currentColor"
+        strokeWidth="7"
+      />
+
+      <circle
+        cx="171"
+        cy="81"
+        r="23"
+        fill="#f1f4f7"
+        stroke="currentColor"
+        strokeWidth="7"
+      />
+    </svg>
+  );
+}
+
+============================================================
+FILE: .\lib\vehicles.ts
+============================================================
+
+import { ApiError } from "@/lib/api";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
+
+export type Vehicle = {
+  id: string;
+  user_id: string;
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string | null;
+  image_url?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type VehicleCreatePayload = {
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  transmission: string;
+  nickname?: string;
+  image_url?: string;
+};
+
+
+export type VehiclePreview = {
+  found: boolean;
+  image_url: string | null;
+  thumbnail_url: string | null;
+  source_url: string | null;
+  message: string | null;
+};
+
+export type VehicleUpdatePayload = Partial<VehicleCreatePayload>;
+
+async function readResponse(response: Response) {
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType =
+    response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    detail:
+      text ||
+      "Unexpected response from PartPilot.",
+  };
+}
+
+function authHeaders(token: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+export async function getVehicles(
+  token: string,
+): Promise<Vehicle[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicles.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function getVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to load vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function createVehicle(
+  token: string,
+  payload: VehicleCreatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to add vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function updateVehicle(
+  token: string,
+  vehicleId: string,
+  payload: VehicleUpdatePayload,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ?? "Unable to update vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function setActiveVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<Vehicle> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}/active`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to activate vehicle.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+export async function deleteVehicle(
+  token: string,
+  vehicleId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    },
+  );
+
+  if (!response.ok) {
+    const data = await readResponse(response);
+
+    throw new ApiError(
+      data?.detail ?? "Unable to delete vehicle.",
+      response.status,
+    );
+  }
+}
+
+
+
+export async function getVehiclePreview(
+  token: string,
+  year: number,
+  make: string,
+  model: string,
+): Promise<VehiclePreview> {
+  const params = new URLSearchParams({
+    year: String(year),
+    make,
+    model,
+  });
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/preview/image?${params.toString()}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  const data = await readResponse(response);
+
+  if (!response.ok) {
+    throw new ApiError(
+      data?.detail ??
+        "Unable to load vehicle preview.",
+      response.status,
+    );
+  }
+
+  return data;
+}
+
+============================================================
+FILE: .\lib\auth.ts
+============================================================
+
+const TOKEN_KEY = "partpilot_access_token";
+
+export function saveAccessToken(token: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function removeAccessToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+export function isAuthenticated(): boolean {
+  return Boolean(getAccessToken());
+}
+
+============================================================
+FILE: .\components\customer\PublicNavbarAuthActions.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  UserRound,
+} from "lucide-react";
+
+import {
+  ApiError,
+  getCurrentUser,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
+
+import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
+
+
+type SessionState =
+  | "checking"
+  | "guest"
+  | "customer"
+  | "hidden";
+
+
+export default function PublicNavbarAuthActions() {
+  const [
+    state,
+    setState,
+  ] =
+    useState<SessionState>(
+      "checking",
+    );
+
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+
+    const timer =
+      window.setTimeout(
+        () => {
+          async function load() {
+            const token =
+              getAccessToken();
+
+
+            if (!token) {
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+
+
+              return;
+            }
+
+
+            try {
+              const user =
+                await getCurrentUser(
+                  token,
+                );
+
+
+              if (
+                cancelled
+              ) {
+                return;
+              }
+
+
+              setState(
+                user.role ===
+                  "admin"
+                  ? "hidden"
+                  : "customer",
+              );
+
+            } catch (
+              error
+            ) {
+              if (
+                error instanceof
+                  ApiError &&
+                (
+                  error.status ===
+                    401 ||
+                  error.status ===
+                    403
+                )
+              ) {
+                removeAccessToken();
+              }
+
+
+              if (
+                !cancelled
+              ) {
+                setState(
+                  "guest",
+                );
+              }
+            }
+          }
+
+
+          void load();
+        },
+        0,
+      );
+
+
+    return () => {
+      cancelled =
+        true;
+
+      window.clearTimeout(
+        timer,
+      );
+    };
+  }, []);
+
+
+  if (
+    state ===
+      "checking" ||
+    state ===
+      "hidden"
+  ) {
+    return (
+      <div className="h-9 w-[120px]" />
+    );
+  }
+
+
+  if (
+    state ===
+    "guest"
+  ) {
+    return (
+      <div className="ml-2 flex items-center gap-2">
+        <Link
+          href="/login"
+          className="flex h-8 items-center justify-center rounded-[5px] px-3 text-[9px] font-semibold text-[#d0d9e2] transition hover:bg-white/[0.06] hover:text-white"
+        >
+          Login
+        </Link>
+
+        <Link
+          href="/register"
+          className="flex h-8 items-center justify-center rounded-[5px] bg-[#e31b2d] px-3.5 text-[9px] font-semibold text-white transition hover:bg-[#c91727]"
+        >
+          Create account
+        </Link>
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex items-center gap-1">
+      <NavbarNotificationBell />
+
+      <Link
+        href="/account"
+        aria-label="Account"
+        title="Account"
+        className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+      >
+        <UserRound className="h-[16px] w-[16px]" />
+      </Link>
+
+      <CustomerLogoutButton />
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\components\customer\CustomerLogoutButton.tsx
+============================================================
+
+"use client";
+
+import {
+  LogOut,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  removeAccessToken,
+} from "@/lib/auth";
+
+
+export default function CustomerLogoutButton() {
+  const router =
+    useRouter();
+
+
+  function logout() {
+    removeAccessToken();
+
+
+    router.replace(
+      "/login",
+    );
+
+
+    router.refresh();
+  }
+
+
+  return (
+    <button
+      type="button"
+      onClick={
+        logout
+      }
+      aria-label="Sign out"
+      title="Sign out"
+      className="flex h-9 w-9 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
+    >
+      <LogOut className="h-[16px] w-[16px]" />
+    </button>
+  );
+}
+
+
+============================================================
+FILE: .\components\notifications\NavbarNotificationBell.tsx
+============================================================
+
+"use client";
+
+import Link from "next/link";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Bell,
+  CheckCheck,
+  Megaphone,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type CustomerNotification,
+} from "@/lib/notifications";
+
+
+export default function NavbarNotificationBell() {
+  const router =
+    useRouter();
+
+
+  const containerRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    );
+
+
+  const [
+    notifications,
+    setNotifications,
+  ] =
+    useState<CustomerNotification[]>(
+      [],
+    );
+
+
+  const [
+    open,
+    setOpen,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const loadNotifications =
+    useCallback(
+      async () => {
+        const token =
+          getAccessToken();
+
+
+        if (!token) {
+          setNotifications(
+            [],
+          );
+
+          return;
+        }
+
+
+        try {
+          setLoading(
+            true,
+          );
+
+
+          const result =
+            await getNotifications(
+              token,
+            );
+
+
+          setNotifications(
+            result,
+          );
+
+          setError(
+            "",
+          );
+
+        } catch (
+          loadError
+        ) {
+          if (
+            loadError instanceof
+              ApiError &&
+            (
+              loadError.status ===
+                401 ||
+              loadError.status ===
+                403
+            )
+          ) {
+            removeAccessToken();
+
+            setNotifications(
+              [],
+            );
+
+            return;
+          }
+
+
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load notifications.",
+          );
+
+        } finally {
+          setLoading(
+            false,
+          );
+        }
+      },
+      [],
+    );
+
+
+  useEffect(() => {
+    const timeout =
+      window.setTimeout(
+        () => {
+          void loadNotifications();
+        },
+        0,
+      );
+
+
+    return () => {
+      window.clearTimeout(
+        timeout,
+      );
+    };
+  }, [
+    loadNotifications,
+  ]);
+
+
+  useEffect(() => {
+    function handleOutsideClick(
+      event:
+        MouseEvent,
+    ) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(
+          event.target as Node,
+        )
+      ) {
+        setOpen(
+          false,
+        );
+      }
+    }
+
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick,
+    );
+
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick,
+      );
+    };
+  }, []);
+
+
+  const unreadCount =
+    notifications.filter(
+      (
+        notification,
+      ) =>
+        !notification.is_read,
+    ).length;
+
+
+  async function toggleDropdown() {
+    const nextOpen =
+      !open;
+
+
+    setOpen(
+      nextOpen,
+    );
+
+
+    if (
+      nextOpen
+    ) {
+      await loadNotifications();
+    }
+  }
+
+
+  async function markAllRead() {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    try {
+      await markAllNotificationsRead(
+        token,
+      );
+
+
+      const now =
+        new Date()
+          .toISOString();
+
+
+      setNotifications(
+        (
+          current,
+        ) =>
+          current.map(
+            (
+              notification,
+            ) => ({
+              ...notification,
+
+              is_read:
+                true,
+
+              read_at:
+                notification.read_at ??
+                now,
+            }),
+          ),
+      );
+
+
+      setError(
+        "",
+      );
+
+    } catch (
+      readError
+    ) {
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notifications.",
+      );
+    }
+  }
+
+
+  async function openNotification(
+    notification:
+      CustomerNotification,
+  ) {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    let current =
+      notification;
+
+
+    try {
+      if (
+        !notification.is_read
+      ) {
+        current =
+          await markNotificationRead(
+            token,
+            notification.id,
+          );
+
+
+        setNotifications(
+          (
+            items,
+          ) =>
+            items.map(
+              (
+                item,
+              ) =>
+                item.id ===
+                current.id
+                  ? current
+                  : item,
+            ),
+        );
+      }
+
+
+      setOpen(
+        false,
+      );
+
+
+      if (
+        current.link &&
+        current.link.startsWith(
+          "/",
+        )
+      ) {
+        router.push(
+          current.link,
+        );
+      }
+
+    } catch (
+      readError
+    ) {
+      if (
+        readError instanceof
+          ApiError &&
+        readError.status ===
+          401
+      ) {
+        removeAccessToken();
+
+        return;
+      }
+
+
+      setError(
+        readError instanceof
+          Error
+          ? readError.message
+          : "Unable to update notification.",
+      );
+    }
+  }
+
+
+  return (
+    <div
+      ref={
+        containerRef
+      }
+      className="relative"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          void toggleDropdown();
+        }}
+        aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#071523] text-white ring-1 ring-white/10 transition hover:bg-[#10293f]"
+      >
+        <Bell className="h-[17px] w-[17px]" />
+
+
+        {unreadCount >
+          0 && (
+          <span className="absolute right-0 top-0 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[8px] font-bold leading-none text-white">
+            {
+              unreadCount >
+              99
+                ? "99+"
+                : unreadCount
+            }
+          </span>
+        )}
+      </button>
+
+
+      {open && (
+        <div className="absolute right-0 top-[44px] z-[100] w-[360px] max-w-[calc(100vw-32px)] overflow-hidden rounded-[10px] border border-[#dfe3e8] bg-white text-[#101828] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
+          <div className="flex items-start justify-between border-b border-[#eaecf0] px-4 py-4">
+            <div>
+              <h2 className="text-[12px] font-bold">
+                Notifications
+              </h2>
+
+              <p className="mt-1 text-[8px] text-[#667085]">
+                {
+                  unreadCount
+                }{" "}
+                unread
+              </p>
+            </div>
+
+
+            <div className="flex items-center gap-1">
+              {unreadCount >
+                0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void markAllRead();
+                  }}
+                  className="flex h-8 items-center gap-1.5 rounded-[6px] px-2 text-[8px] font-semibold text-[#475467] hover:bg-[#f2f4f7]"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+
+                  Read all
+                </button>
+              )}
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  setOpen(
+                    false,
+                  )
+                }
+                aria-label="Close notifications"
+                className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#667085] hover:bg-[#f2f4f7]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+
+          {error && (
+            <div className="border-b border-[#fecdca] bg-[#fff4f5] px-4 py-3 text-[8px] text-[#b42318]">
+              {
+                error
+              }
+            </div>
+          )}
+
+
+          <div className="max-h-[380px] overflow-y-auto">
+            {loading &&
+            notifications.length ===
+              0 ? (
+              <div className="space-y-2 p-4">
+                {[
+                  1,
+                  2,
+                  3,
+                ].map(
+                  (
+                    item,
+                  ) => (
+                    <div
+                      key={
+                        item
+                      }
+                      className="h-[72px] animate-pulse rounded-[7px] bg-[#f2f4f7]"
+                    />
+                  ),
+                )}
+              </div>
+            ) : notifications.length ===
+              0 ? (
+              <div className="px-5 py-10 text-center">
+                <Bell className="mx-auto h-7 w-7 text-[#b8c0ca]" />
+
+                <p className="mt-3 text-[10px] font-semibold">
+                  No notifications
+                </p>
+
+                <p className="mt-1 text-[8px] text-[#98a2b3]">
+                  You&apos;re all caught up.
+                </p>
+              </div>
+            ) : (
+              notifications
+                .slice(
+                  0,
+                  6,
+                )
+                .map(
+                  (
+                    notification,
+                  ) => (
+                    <button
+                      key={
+                        notification.id
+                      }
+                      type="button"
+                      onClick={() => {
+                        void openNotification(
+                          notification,
+                        );
+                      }}
+                      className={
+                        notification.is_read
+                          ? "flex w-full gap-3 border-b border-[#f0f2f5] px-4 py-4 text-left last:border-0 hover:bg-[#fafbfc]"
+                          : "flex w-full gap-3 border-b border-[#f0f2f5] bg-[#fffafb] px-4 py-4 text-left last:border-0 hover:bg-[#fff5f6]"
+                      }
+                    >
+                      <NotificationCategoryIcon
+                        notification={
+                          notification
+                        }
+                      />
+
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="truncate text-[9px] font-bold">
+                            {
+                              notification.title
+                            }
+                          </p>
+
+
+                          {!notification.is_read && (
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#e31b2d]" />
+                          )}
+                        </div>
+
+
+                        <p className="mt-1 line-clamp-2 text-[8px] leading-4 text-[#667085]">
+                          {
+                            notification.message
+                          }
+                        </p>
+
+
+                        <p className="mt-2 text-[7px] text-[#98a2b3]">
+                          {
+                            formatDate(
+                              notification.created_at,
+                            )
+                          }
+                        </p>
+                      </div>
+                    </button>
+                  ),
+                )
+            )}
+          </div>
+
+
+          <div className="border-t border-[#eaecf0] bg-[#fafbfc] p-3">
+            <Link
+              href="/account/notifications"
+              onClick={() =>
+                setOpen(
+                  false,
+                )
+              }
+              className="flex h-9 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white text-[8px] font-semibold text-[#344054]"
+            >
+              View all notifications
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function NotificationCategoryIcon({
+  notification,
+}: {
+  notification:
+    CustomerNotification;
+}) {
+  if (
+    notification.category ===
+    "promotion"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#fff1f3] text-[#c01048]">
+        <Megaphone className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  if (
+    notification.category ===
+    "account"
+  ) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#eff4ff] text-[#3538cd]">
+        <ShieldCheck className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#f2f4f7] text-[#475467]">
+      <Bell className="h-3.5 w-3.5" />
+    </div>
+  );
+}
+
+
+function formatDate(
+  value: string,
+) {
+  const date =
+    new Date(
+      value,
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "";
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "numeric",
+
+      hour:
+        "numeric",
+
+      minute:
+        "2-digit",
+    },
+  ).format(
+    date,
+  );
+}
+
+
+============================================================
+FILE: .\package.json
+============================================================
+
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.8.0",
+    "framer-motion": "^13.2.0",
+    "lucide-react": "^1.45.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+

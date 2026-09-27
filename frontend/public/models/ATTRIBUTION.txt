@@ -1,0 +1,9 @@
+﻿Temporary Vehnexa diagnostic-development asset.
+
+Model: Car Concept
+Source: KhronosGroup glTF Sample Assets
+License: Creative Commons Attribution 4.0 International
+Model optimization/conversion: Darmstadt Graphics Group GmbH / Eric Chadwick
+
+This asset is used as a temporary development and visualization asset.
+It is not presented as the user's actual vehicle model.

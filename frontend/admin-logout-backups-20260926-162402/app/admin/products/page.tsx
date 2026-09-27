@@ -1,0 +1,2984 @@
+"use client";
+
+import Link from "next/link";
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  Bell,
+  Bot,
+  CarFront,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  LayoutDashboard,
+  Package,
+  Pencil,
+  Plus,
+  Search,
+  Shapes,
+  ShoppingBag,
+  Star,
+  Tags,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+
+import {
+  ApiError,
+  getCurrentUser,
+  type UserPublic,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "@/lib/auth";
+
+import {
+  createAdminProduct,
+  getAdminProducts,
+  updateAdminProduct,
+  type AdminProductCreatePayload,
+  type AdminProductUpdatePayload,
+} from "@/lib/admin";
+
+import {
+  getBrands,
+  getCategories,
+  type Brand,
+  type Category,
+  type Product,
+} from "@/lib/products";
+
+
+type ProductStatusFilter =
+  | "all"
+  | "active"
+  | "inactive"
+  | "low_stock"
+  | "out_of_stock";
+
+
+type ProductFormState = {
+  name: string;
+  sku: string;
+  partNumber: string;
+  brandId: string;
+  categoryId: string;
+  subcategorySlug: string;
+  description: string;
+  price: string;
+  salePrice: string;
+  stockQuantity: string;
+  warranty: string;
+  imageUrls: string;
+  specifications: string;
+  isActive: boolean;
+};
+
+
+const PAGE_SIZE =
+  50;
+
+
+const EMPTY_FORM: ProductFormState = {
+  name:
+    "",
+
+  sku:
+    "",
+
+  partNumber:
+    "",
+
+  brandId:
+    "",
+
+  categoryId:
+    "",
+
+  subcategorySlug:
+    "",
+
+  description:
+    "",
+
+  price:
+    "",
+
+  salePrice:
+    "",
+
+  stockQuantity:
+    "0",
+
+  warranty:
+    "",
+
+  imageUrls:
+    "",
+
+  specifications:
+    "{}",
+
+  isActive:
+    true,
+};
+
+
+export default function AdminProductsPage() {
+  const router =
+    useRouter();
+
+
+  const [
+    user,
+    setUser,
+  ] =
+    useState<UserPublic | null>(
+      null,
+    );
+
+
+  const [
+    products,
+    setProducts,
+  ] =
+    useState<Product[]>(
+      [],
+    );
+
+
+  const [
+    categories,
+    setCategories,
+  ] =
+    useState<Category[]>(
+      [],
+    );
+
+
+  const [
+    brands,
+    setBrands,
+  ] =
+    useState<Brand[]>(
+      [],
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true,
+    );
+
+
+  const [
+    saving,
+    setSaving,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    formError,
+    setFormError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    search,
+    setSearch,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState<ProductStatusFilter>(
+      "all",
+    );
+
+
+  const [
+    categoryFilter,
+    setCategoryFilter,
+  ] =
+    useState(
+      "all",
+    );
+
+
+  const [
+    currentPage,
+    setCurrentPage,
+  ] =
+    useState(
+      1,
+    );
+
+
+  const [
+    editorOpen,
+    setEditorOpen,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    editingProduct,
+    setEditingProduct,
+  ] =
+    useState<Product | null>(
+      null,
+    );
+
+
+  const [
+    form,
+    setForm,
+  ] =
+    useState<ProductFormState>(
+      EMPTY_FORM,
+    );
+
+
+  useEffect(() => {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.replace(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    const accessToken =
+      token;
+
+
+    let cancelled =
+      false;
+
+
+    async function load() {
+      try {
+        const currentUser =
+          await getCurrentUser(
+            accessToken,
+          );
+
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+
+        if (
+          currentUser.role !==
+          "admin"
+        ) {
+          router.replace(
+            "/",
+          );
+
+          return;
+        }
+
+
+        const [
+          productResult,
+          categoryResult,
+          brandResult,
+        ] =
+          await Promise.all(
+            [
+              getAdminProducts(
+                accessToken,
+              ),
+
+              getCategories(),
+
+              getBrands(),
+            ],
+          );
+
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+
+        setUser(
+          currentUser,
+        );
+
+        setProducts(
+          productResult,
+        );
+
+        setCategories(
+          categoryResult,
+        );
+
+        setBrands(
+          brandResult,
+        );
+
+      } catch (
+        loadError
+      ) {
+        if (
+          loadError instanceof
+            ApiError &&
+          loadError.status ===
+            401
+        ) {
+          removeAccessToken();
+
+          router.replace(
+            "/login",
+          );
+
+          return;
+        }
+
+
+        if (
+          loadError instanceof
+            ApiError &&
+          loadError.status ===
+            403
+        ) {
+          router.replace(
+            "/",
+          );
+
+          return;
+        }
+
+
+        if (
+          !cancelled
+        ) {
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load products.",
+          );
+        }
+
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setLoading(
+            false,
+          );
+        }
+      }
+    }
+
+
+    void load();
+
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    router,
+  ]);
+
+
+  const categoryMap =
+    useMemo(
+      () =>
+        new Map(
+          categories.map(
+            (
+              category,
+            ) => [
+              category.id,
+              category,
+            ],
+          ),
+        ),
+      [
+        categories,
+      ],
+    );
+
+
+  const brandMap =
+    useMemo(
+      () =>
+        new Map(
+          brands.map(
+            (
+              brand,
+            ) => [
+              brand.id,
+              brand,
+            ],
+          ),
+        ),
+      [
+        brands,
+      ],
+    );
+
+
+  const activeCount =
+    useMemo(
+      () =>
+        products.filter(
+          (
+            product,
+          ) =>
+            product.is_active,
+        ).length,
+      [
+        products,
+      ],
+    );
+
+
+  const inactiveCount =
+    products.length -
+    activeCount;
+
+
+  const lowStockCount =
+    useMemo(
+      () =>
+        products.filter(
+          (
+            product,
+          ) =>
+            product.is_active &&
+            product.stock_quantity <=
+              5,
+        ).length,
+      [
+        products,
+      ],
+    );
+
+
+  const visibleProducts =
+    useMemo(
+      () => {
+        const needle =
+          search
+            .trim()
+            .toLowerCase();
+
+
+        return products.filter(
+          (
+            product,
+          ) => {
+            if (
+              statusFilter ===
+                "active" &&
+              !product.is_active
+            ) {
+              return false;
+            }
+
+
+            if (
+              statusFilter ===
+                "inactive" &&
+              product.is_active
+            ) {
+              return false;
+            }
+
+
+            if (
+              statusFilter ===
+                "low_stock" &&
+              (
+                !product.is_active ||
+                product.stock_quantity >
+                  5
+              )
+            ) {
+              return false;
+            }
+
+
+            if (
+              statusFilter ===
+                "out_of_stock" &&
+              product.stock_quantity !==
+                0
+            ) {
+              return false;
+            }
+
+
+            if (
+              categoryFilter !==
+                "all" &&
+              product.category_id !==
+                categoryFilter
+            ) {
+              return false;
+            }
+
+
+            if (!needle) {
+              return true;
+            }
+
+
+            return [
+              product.name,
+              product.sku,
+              product.part_number,
+              product.slug,
+            ].some(
+              (
+                value,
+              ) =>
+                value
+                  .toLowerCase()
+                  .includes(
+                    needle,
+                  ),
+            );
+          },
+        );
+      },
+      [
+        products,
+        search,
+        statusFilter,
+        categoryFilter,
+      ],
+    );
+
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        visibleProducts.length /
+          PAGE_SIZE,
+      ),
+    );
+
+
+  const safePage =
+    Math.min(
+      currentPage,
+      totalPages,
+    );
+
+
+  const paginatedProducts =
+    visibleProducts.slice(
+      (
+        safePage -
+        1
+      ) *
+        PAGE_SIZE,
+      safePage *
+        PAGE_SIZE,
+    );
+
+
+  const selectedCategory =
+    categories.find(
+      (
+        category,
+      ) =>
+        category.id ===
+        form.categoryId,
+    );
+
+
+  const availableSubcategories =
+    selectedCategory
+      ?.subcategories ??
+    [];
+
+
+  const adminName =
+    user
+      ? `${user.first_name} ${user.last_name}`.trim()
+      : "Administrator";
+
+
+  function openCreate() {
+    const firstCategory =
+      categories.find(
+        (
+          category,
+        ) =>
+          category.is_active,
+      );
+
+
+    const firstBrand =
+      brands.find(
+        (
+          brand,
+        ) =>
+          brand.is_active,
+      );
+
+
+    setEditingProduct(
+      null,
+    );
+
+
+    setForm(
+      {
+        ...EMPTY_FORM,
+
+        brandId:
+          firstBrand?.id ??
+          "",
+
+        categoryId:
+          firstCategory?.id ??
+          "",
+
+        subcategorySlug:
+          firstCategory
+            ?.subcategories[
+              0
+            ]
+            ?.slug ??
+          "",
+      },
+    );
+
+
+    setFormError(
+      "",
+    );
+
+    setEditorOpen(
+      true,
+    );
+  }
+
+
+  function openEdit(
+    product: Product,
+  ) {
+    const specs: Record<
+      string,
+      string
+    > = {};
+
+
+    Object.entries(
+      product.specifications,
+    ).forEach(
+      (
+        [
+          key,
+          value,
+        ],
+      ) => {
+        specs[
+          key
+        ] =
+          value ===
+          null ||
+          value ===
+          undefined
+            ? ""
+            : String(
+                value,
+              );
+      },
+    );
+
+
+    setEditingProduct(
+      product,
+    );
+
+
+    setForm(
+      {
+        name:
+          product.name,
+
+        sku:
+          product.sku,
+
+        partNumber:
+          product.part_number,
+
+        brandId:
+          product.brand_id,
+
+        categoryId:
+          product.category_id,
+
+        subcategorySlug:
+          product.subcategory_slug,
+
+        description:
+          product.description,
+
+        price:
+          String(
+            product.price,
+          ),
+
+        salePrice:
+          product.sale_price ===
+          null
+            ? ""
+            : String(
+                product.sale_price,
+              ),
+
+        stockQuantity:
+          String(
+            product.stock_quantity,
+          ),
+
+        warranty:
+          product.warranty ??
+          "",
+
+        imageUrls:
+          product.images.join(
+            "\n",
+          ),
+
+        specifications:
+          JSON.stringify(
+            specs,
+            null,
+            2,
+          ),
+
+        isActive:
+          product.is_active,
+      },
+    );
+
+
+    setFormError(
+      "",
+    );
+
+    setEditorOpen(
+      true,
+    );
+  }
+
+
+  function updateForm<
+    K extends keyof ProductFormState,
+  >(
+    key: K,
+    value: ProductFormState[
+      K
+    ],
+  ) {
+    setForm(
+      (
+        current,
+      ) => ({
+        ...current,
+        [key]:
+          value,
+      }),
+    );
+  }
+
+
+  function changeCategory(
+    categoryId: string,
+  ) {
+    const category =
+      categories.find(
+        (
+          item,
+        ) =>
+          item.id ===
+          categoryId,
+      );
+
+
+    setForm(
+      (
+        current,
+      ) => ({
+        ...current,
+
+        categoryId,
+
+        subcategorySlug:
+          category
+            ?.subcategories[
+              0
+            ]
+            ?.slug ??
+          "",
+      }),
+    );
+  }
+
+
+  async function saveProduct() {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.replace(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    const price =
+      Number(
+        form.price,
+      );
+
+
+    const stockQuantity =
+      Number(
+        form.stockQuantity,
+      );
+
+
+    const salePrice =
+      form.salePrice.trim()
+        ? Number(
+            form.salePrice,
+          )
+        : null;
+
+
+    if (
+      !form.name.trim() ||
+      (
+        !editingProduct &&
+        !form.sku.trim()
+      ) ||
+      !form.partNumber.trim() ||
+      !form.brandId ||
+      !form.categoryId ||
+      !form.subcategorySlug ||
+      !form.description.trim()
+    ) {
+      setFormError(
+        "Complete all required product fields.",
+      );
+
+      return;
+    }
+
+
+    if (
+      !Number.isFinite(
+        price,
+      ) ||
+      price <=
+        0
+    ) {
+      setFormError(
+        "Regular price must be greater than 0.",
+      );
+
+      return;
+    }
+
+
+    if (
+      salePrice !==
+        null &&
+      (
+        !Number.isFinite(
+          salePrice,
+        ) ||
+        salePrice <=
+          0 ||
+        salePrice >
+          price
+      )
+    ) {
+      setFormError(
+        "Sale price must be greater than 0 and cannot exceed the regular price.",
+      );
+
+      return;
+    }
+
+
+    if (
+      !Number.isInteger(
+        stockQuantity,
+      ) ||
+      stockQuantity <
+        0
+    ) {
+      setFormError(
+        "Stock quantity must be a whole number of 0 or more.",
+      );
+
+      return;
+    }
+
+
+    let specifications:
+      Record<
+        string,
+        string
+      >;
+
+
+    try {
+      const parsed =
+        JSON.parse(
+          form.specifications ||
+            "{}",
+        ) as unknown;
+
+
+      if (
+        typeof parsed !==
+          "object" ||
+        parsed ===
+          null ||
+        Array.isArray(
+          parsed,
+        )
+      ) {
+        throw new Error();
+      }
+
+
+      specifications =
+        Object.fromEntries(
+          Object.entries(
+            parsed,
+          ).map(
+            (
+              [
+                key,
+                value,
+              ],
+            ) => [
+              key,
+              String(
+                value,
+              ),
+            ],
+          ),
+        );
+
+    } catch {
+      setFormError(
+        "Specifications must be a valid JSON object.",
+      );
+
+      return;
+    }
+
+
+    const images =
+      form.imageUrls
+        .split(
+          "\n",
+        )
+        .map(
+          (
+            value,
+          ) =>
+            value.trim(),
+        )
+        .filter(
+          Boolean,
+        );
+
+
+    if (
+      images.length >
+      10
+    ) {
+      setFormError(
+        "A product can have at most 10 image URLs.",
+      );
+
+      return;
+    }
+
+
+    setSaving(
+      true,
+    );
+
+    setFormError(
+      "",
+    );
+
+
+    try {
+      let saved:
+        Product;
+
+
+      if (
+        editingProduct
+      ) {
+        const payload:
+          AdminProductUpdatePayload =
+          {
+            name:
+              form.name.trim(),
+
+            part_number:
+              form.partNumber.trim(),
+
+            brand_id:
+              form.brandId,
+
+            category_id:
+              form.categoryId,
+
+            subcategory_slug:
+              form.subcategorySlug,
+
+            description:
+              form.description.trim(),
+
+            price,
+
+            sale_price:
+              salePrice,
+
+            stock_quantity:
+              stockQuantity,
+
+            images,
+
+            specifications,
+
+            warranty:
+              form.warranty.trim()
+                ? form.warranty.trim()
+                : null,
+
+            is_active:
+              form.isActive,
+          };
+
+
+        saved =
+          await updateAdminProduct(
+            token,
+            editingProduct.id,
+            payload,
+          );
+
+
+        setProducts(
+          (
+            current,
+          ) =>
+            current.map(
+              (
+                product,
+              ) =>
+                product.id ===
+                saved.id
+                  ? saved
+                  : product,
+            ),
+        );
+
+      } else {
+        const payload:
+          AdminProductCreatePayload =
+          {
+            name:
+              form.name.trim(),
+
+            sku:
+              form.sku
+                .trim()
+                .toUpperCase(),
+
+            part_number:
+              form.partNumber.trim(),
+
+            brand_id:
+              form.brandId,
+
+            category_id:
+              form.categoryId,
+
+            subcategory_slug:
+              form.subcategorySlug,
+
+            description:
+              form.description.trim(),
+
+            price,
+
+            sale_price:
+              salePrice,
+
+            stock_quantity:
+              stockQuantity,
+
+            images,
+
+            specifications,
+
+            warranty:
+              form.warranty.trim()
+                ? form.warranty.trim()
+                : null,
+          };
+
+
+        saved =
+          await createAdminProduct(
+            token,
+            payload,
+          );
+
+
+        setProducts(
+          (
+            current,
+          ) => [
+            saved,
+            ...current,
+          ],
+        );
+      }
+
+
+      setEditorOpen(
+        false,
+      );
+
+      setEditingProduct(
+        null,
+      );
+
+    } catch (
+      saveError
+    ) {
+      if (
+        saveError instanceof
+          ApiError &&
+        saveError.status ===
+          401
+      ) {
+        removeAccessToken();
+
+        router.replace(
+          "/login",
+        );
+
+        return;
+      }
+
+
+      setFormError(
+        saveError instanceof
+          Error
+          ? saveError.message
+          : "Unable to save product.",
+      );
+
+    } finally {
+      setSaving(
+        false,
+      );
+    }
+  }
+
+
+  async function toggleActive(
+    product: Product,
+  ) {
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.replace(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    if (
+      product.is_active
+    ) {
+      const confirmed =
+        window.confirm(
+          `Deactivate ${product.name}? It will no longer appear in the public Shop.`,
+        );
+
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+
+    try {
+      const updated =
+        await updateAdminProduct(
+          token,
+          product.id,
+          {
+            is_active:
+              !product.is_active,
+          },
+        );
+
+
+      setProducts(
+        (
+          current,
+        ) =>
+          current.map(
+            (
+              item,
+            ) =>
+              item.id ===
+              updated.id
+                ? updated
+                : item,
+          ),
+      );
+
+    } catch (
+      updateError
+    ) {
+      setError(
+        updateError instanceof
+          Error
+          ? updateError.message
+          : "Unable to change product status.",
+      );
+    }
+  }
+
+
+  return (
+    <main className="min-h-screen bg-[#f5f6f8] text-[#101828]">
+      <div className="flex min-h-screen">
+        <AdminSidebar />
+
+
+        <section className="min-w-0 flex-1">
+          <header className="flex h-[70px] items-center justify-between border-b border-[#e4e7ec] bg-white px-5 sm:px-8">
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#98a2b3]">
+                Admin Console
+              </p>
+
+              <p className="mt-1 text-[12px] font-semibold text-[#344054]">
+                {
+                  adminName
+                }
+              </p>
+            </div>
+
+
+            <Link
+              href="/"
+              className="flex items-center gap-2 rounded-[7px] border border-[#d0d5dd] bg-white px-4 py-2 text-[9px] font-semibold text-[#344054]"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+
+              Store
+            </Link>
+          </header>
+
+
+          <div className="mx-auto max-w-[1450px] p-5 sm:p-8">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <h1 className="text-[28px] font-bold tracking-[-0.035em]">
+                  Products & inventory
+                </h1>
+
+                <p className="mt-2 text-[11px] text-[#667085]">
+                  Manage catalog products, pricing, stock and storefront availability.
+                </p>
+              </div>
+
+
+              <button
+                type="button"
+                onClick={
+                  openCreate
+                }
+                className="flex h-10 items-center justify-center gap-2 rounded-[7px] bg-[#e31b2d] px-4 text-[9px] font-semibold text-white"
+              >
+                <Plus className="h-3.5 w-3.5" />
+
+                Add product
+              </button>
+            </div>
+
+
+            <section className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                label="Total products"
+                value={
+                  products.length
+                }
+              />
+
+              <MetricCard
+                label="Active"
+                value={
+                  activeCount
+                }
+              />
+
+              <MetricCard
+                label="Inactive"
+                value={
+                  inactiveCount
+                }
+              />
+
+              <MetricCard
+                label="Low stock"
+                value={
+                  lowStockCount
+                }
+                alert={
+                  lowStockCount >
+                  0
+                }
+              />
+            </section>
+
+
+            {error && (
+              <div className="mt-5 rounded-[8px] border border-[#f1c7cc] bg-[#fff4f5] px-4 py-3 text-[10px] text-[#b4232f]">
+                {
+                  error
+                }
+              </div>
+            )}
+
+
+            <div className="mt-7 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="relative w-full xl:max-w-[320px]">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#98a2b3]" />
+
+                <input
+                  value={
+                    search
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) => {
+                      setSearch(
+                        event.target.value,
+                      );
+
+                      setCurrentPage(
+                        1,
+                      );
+                    }
+                  }
+                  placeholder="Search name, SKU or part number..."
+                  className="h-10 w-full rounded-[7px] border border-[#d0d5dd] bg-white pl-9 pr-3 text-[10px] outline-none"
+                />
+              </div>
+
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <select
+                  value={
+                    categoryFilter
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) => {
+                      setCategoryFilter(
+                        event.target.value,
+                      );
+
+                      setCurrentPage(
+                        1,
+                      );
+                    }
+                  }
+                  className="h-10 rounded-[7px] border border-[#d0d5dd] bg-white px-3 text-[10px] outline-none"
+                >
+                  <option value="all">
+                    All categories
+                  </option>
+
+                  {categories.map(
+                    (
+                      category,
+                    ) => (
+                      <option
+                        key={
+                          category.id
+                        }
+                        value={
+                          category.id
+                        }
+                      >
+                        {
+                          category.name
+                        }
+                      </option>
+                    ),
+                  )}
+                </select>
+
+
+                <select
+                  value={
+                    statusFilter
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) => {
+                      setStatusFilter(
+                        event.target.value as
+                          ProductStatusFilter,
+                      );
+
+                      setCurrentPage(
+                        1,
+                      );
+                    }
+                  }
+                  className="h-10 rounded-[7px] border border-[#d0d5dd] bg-white px-3 text-[10px] outline-none"
+                >
+                  <option value="all">
+                    All inventory
+                  </option>
+
+                  <option value="active">
+                    Active
+                  </option>
+
+                  <option value="inactive">
+                    Inactive
+                  </option>
+
+                  <option value="low_stock">
+                    Low stock
+                  </option>
+
+                  <option value="out_of_stock">
+                    Out of stock
+                  </option>
+                </select>
+              </div>
+            </div>
+
+
+            <div className="mt-4 overflow-hidden rounded-[14px] border border-[#dfe3e8] bg-white">
+              {loading ? (
+                <div className="space-y-3 p-5">
+                  {[
+                    1,
+                    2,
+                    3,
+                    4,
+                  ].map(
+                    (
+                      item,
+                    ) => (
+                      <div
+                        key={
+                          item
+                        }
+                        className="h-[72px] animate-pulse rounded-[8px] bg-[#f2f4f7]"
+                      />
+                    ),
+                  )}
+                </div>
+              ) : paginatedProducts.length ===
+                0 ? (
+                <div className="px-6 py-16 text-center">
+                  <Package className="mx-auto h-8 w-8 text-[#98a2b3]" />
+
+                  <p className="mt-4 text-[12px] font-semibold">
+                    No products found
+                  </p>
+
+                  <p className="mt-1 text-[9px] text-[#667085]">
+                    Try changing the current catalog filters.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1050px] border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#eaecf0] bg-[#fafbfc] text-left">
+                        <TableHeading>
+                          Product
+                        </TableHeading>
+
+                        <TableHeading>
+                          Brand
+                        </TableHeading>
+
+                        <TableHeading>
+                          Category
+                        </TableHeading>
+
+                        <TableHeading>
+                          Price
+                        </TableHeading>
+
+                        <TableHeading>
+                          Stock
+                        </TableHeading>
+
+                        <TableHeading>
+                          Status
+                        </TableHeading>
+
+                        <TableHeading>
+                          Updated
+                        </TableHeading>
+
+                        <TableHeading>
+                          Actions
+                        </TableHeading>
+                      </tr>
+                    </thead>
+
+
+                    <tbody>
+                      {paginatedProducts.map(
+                        (
+                          product,
+                        ) => (
+                          <tr
+                            key={
+                              product.id
+                            }
+                            className="border-b border-[#eaecf0] last:border-0 hover:bg-[#fafbfc]"
+                          >
+                            <TableCell>
+                              <div className="max-w-[260px]">
+                                <p className="truncate font-semibold text-[#101828]">
+                                  {
+                                    product.name
+                                  }
+                                </p>
+
+                                <p className="mt-1 truncate text-[8px] text-[#98a2b3]">
+                                  {
+                                    product.sku
+                                  }{" "}
+                                  ·{" "}
+                                  {
+                                    product.part_number
+                                  }
+                                </p>
+                              </div>
+                            </TableCell>
+
+
+                            <TableCell>
+                              {
+                                brandMap.get(
+                                  product.brand_id,
+                                )
+                                  ?.name ??
+                                "Unknown"
+                              }
+                            </TableCell>
+
+
+                            <TableCell>
+                              <div>
+                                <p>
+                                  {
+                                    categoryMap.get(
+                                      product.category_id,
+                                    )
+                                      ?.name ??
+                                    "Unknown"
+                                  }
+                                </p>
+
+                                <p className="mt-1 text-[8px] text-[#98a2b3]">
+                                  {
+                                    product.subcategory_slug
+                                  }
+                                </p>
+                              </div>
+                            </TableCell>
+
+
+                            <TableCell>
+                              <div>
+                                <p className="font-semibold text-[#101828]">
+                                  {
+                                    formatMoney(
+                                      product.sale_price ??
+                                        product.price,
+                                    )
+                                  }
+                                </p>
+
+                                {product.sale_price !==
+                                  null && (
+                                  <p className="mt-1 text-[8px] text-[#98a2b3] line-through">
+                                    {
+                                      formatMoney(
+                                        product.price,
+                                      )
+                                    }
+                                  </p>
+                                )}
+                              </div>
+                            </TableCell>
+
+
+                            <TableCell>
+                              <StockBadge
+                                quantity={
+                                  product.stock_quantity
+                                }
+                              />
+                            </TableCell>
+
+
+                            <TableCell>
+                              <ProductStatusBadge
+                                active={
+                                  product.is_active
+                                }
+                              />
+                            </TableCell>
+
+
+                            <TableCell>
+                              {
+                                formatDate(
+                                  product.updated_at,
+                                )
+                              }
+                            </TableCell>
+
+
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openEdit(
+                                      product,
+                                    )
+                                  }
+                                  className="flex h-8 items-center gap-1.5 rounded-[6px] border border-[#d0d5dd] px-2.5 text-[8px] font-semibold"
+                                >
+                                  <Pencil className="h-3 w-3" />
+
+                                  Edit
+                                </button>
+
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void toggleActive(
+                                      product,
+                                    )
+                                  }
+                                  className={
+                                    product.is_active
+                                      ? "h-8 rounded-[6px] border border-[#fecdca] px-2.5 text-[8px] font-semibold text-[#b42318]"
+                                      : "h-8 rounded-[6px] border border-[#abefc6] px-2.5 text-[8px] font-semibold text-[#067647]"
+                                  }
+                                >
+                                  {
+                                    product.is_active
+                                      ? "Deactivate"
+                                      : "Activate"
+                                  }
+                                </button>
+                              </div>
+                            </TableCell>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+
+            {!loading && (
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[9px] text-[#98a2b3]">
+                  Showing{" "}
+                  {
+                    paginatedProducts.length
+                  }{" "}
+                  of{" "}
+                  {
+                    visibleProducts.length
+                  }{" "}
+                  matching products ·{" "}
+                  {
+                    products.length
+                  }{" "}
+                  total
+                </p>
+
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={
+                      safePage <=
+                      1
+                    }
+                    onClick={() =>
+                      setCurrentPage(
+                        (
+                          page,
+                        ) =>
+                          Math.max(
+                            1,
+                            page -
+                              1,
+                          ),
+                      )
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+
+
+                  <span className="px-2 text-[9px] font-semibold text-[#475467]">
+                    {
+                      safePage
+                    }{" "}
+                    /{" "}
+                    {
+                      totalPages
+                    }
+                  </span>
+
+
+                  <button
+                    type="button"
+                    disabled={
+                      safePage >=
+                      totalPages
+                    }
+                    onClick={() =>
+                      setCurrentPage(
+                        (
+                          page,
+                        ) =>
+                          Math.min(
+                            totalPages,
+                            page +
+                              1,
+                          ),
+                      )
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#d0d5dd] bg-white disabled:opacity-40"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+
+      {editorOpen && (
+        <ProductEditor
+          form={
+            form
+          }
+          editingProduct={
+            editingProduct
+          }
+          categories={
+            categories.filter(
+              (
+                category,
+              ) =>
+                category.is_active,
+            )
+          }
+          brands={
+            brands.filter(
+              (
+                brand,
+              ) =>
+                brand.is_active,
+            )
+          }
+          availableSubcategories={
+            availableSubcategories
+          }
+          saving={
+            saving
+          }
+          error={
+            formError
+          }
+          onChange={
+            updateForm
+          }
+          onCategoryChange={
+            changeCategory
+          }
+          onClose={() => {
+            if (
+              saving
+            ) {
+              return;
+            }
+
+
+            setEditorOpen(
+              false,
+            );
+
+            setEditingProduct(
+              null,
+            );
+          }}
+          onSave={() =>
+            void saveProduct()
+          }
+        />
+      )}
+    </main>
+  );
+}
+
+
+function AdminSidebar() {
+  return (
+    <aside className="hidden w-[230px] shrink-0 bg-[#071523] text-white lg:flex lg:flex-col">
+      <div className="border-b border-white/10 px-6 py-6">
+        <Link
+          href="/admin"
+          className="flex items-center gap-3"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-[7px] bg-[#ef3d43] text-[18px] font-black italic text-white">
+            V
+          </div>
+
+          <div>
+            <div className="text-[14px] font-bold tracking-wide">
+              VEHNEXA
+            </div>
+
+            <div className="mt-0.5 text-[8px] font-semibold tracking-[0.18em] text-[#98a2b3]">
+              ADMIN CONSOLE
+            </div>
+          </div>
+        </Link>
+      </div>
+
+
+      <nav className="flex-1 space-y-1 px-3 py-5">
+        <AdminNavItem
+          href="/admin"
+          icon={
+            LayoutDashboard
+          }
+          label="Overview"
+        />
+
+        <AdminNavItem
+          href="/admin/products"
+          icon={
+            Package
+          }
+          label="Products"
+          active
+        />
+
+        <AdminNavItem
+          href="/admin/categories"
+          icon={
+            Shapes
+          }
+          label="Categories"
+        />
+
+        <AdminNavItem
+          href="/admin/brands"
+          icon={
+            Tags
+          }
+          label="Brands"
+        />
+
+        <AdminNavItem
+          href="/admin/fitments"
+          icon={
+            CarFront
+          }
+          label="Fitments"
+        />
+
+        <AdminNavItem
+          href="/admin/orders"
+          icon={
+            ShoppingBag
+          }
+          label="Orders"
+        />
+
+        <AdminNavItem
+          href="/admin/users"
+          icon={
+            Users
+          }
+          label="Users"
+        />
+
+        <AdminNavItem href="/admin/reviews"
+          icon={
+            Star
+          }
+          label="Reviews"
+        />
+
+        <AdminNavItem href="/admin/ai-sessions"
+          icon={
+            Bot
+          }
+          label="AI Sessions"
+        />
+
+        <AdminNavItem href="/admin/notifications"
+          icon={
+            Bell
+          }
+          label="Notifications"
+        />
+      </nav>
+
+
+      <div className="border-t border-white/10 p-4">
+        <Link
+          href="/"
+          className="flex h-10 items-center justify-center gap-2 rounded-[7px] border border-white/15 text-[9px] font-semibold text-[#d0d5dd] transition hover:bg-white/5"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+
+          View storefront
+        </Link>
+      </div>
+    </aside>
+  );
+}
+
+
+function ProductEditor({
+  form,
+  editingProduct,
+  categories,
+  brands,
+  availableSubcategories,
+  saving,
+  error,
+  onChange,
+  onCategoryChange,
+  onClose,
+  onSave,
+}: {
+  form:
+    ProductFormState;
+
+  editingProduct:
+    Product | null;
+
+  categories:
+    Category[];
+
+  brands:
+    Brand[];
+
+  availableSubcategories:
+    Category[
+      "subcategories"
+    ];
+
+  saving:
+    boolean;
+
+  error:
+    string;
+
+  onChange:
+    <
+      K extends keyof ProductFormState,
+    >(
+      key: K,
+      value: ProductFormState[
+        K
+      ],
+    ) => void;
+
+  onCategoryChange:
+    (
+      categoryId:
+        string,
+    ) => void;
+
+  onClose:
+    () => void;
+
+  onSave:
+    () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
+      <button
+        type="button"
+        aria-label="Close product editor"
+        onClick={
+          onClose
+        }
+        className="absolute inset-0"
+      />
+
+
+      <aside className="relative z-10 h-full w-full max-w-[650px] overflow-y-auto bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#eaecf0] bg-white px-6 py-5">
+          <div>
+            <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[#98a2b3]">
+              Catalog management
+            </p>
+
+            <h2 className="mt-1 text-[20px] font-bold">
+              {
+                editingProduct
+                  ? "Edit product"
+                  : "Add product"
+              }
+            </h2>
+
+            {editingProduct && (
+              <p className="mt-1 text-[9px] text-[#667085]">
+                {
+                  editingProduct.sku
+                }
+              </p>
+            )}
+          </div>
+
+
+          <button
+            type="button"
+            disabled={
+              saving
+            }
+            onClick={
+              onClose
+            }
+            className="flex h-9 w-9 items-center justify-center rounded-[7px] border border-[#eaecf0] disabled:opacity-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+
+        <div className="space-y-6 p-6">
+          {error && (
+            <div className="rounded-[8px] border border-[#f1c7cc] bg-[#fff4f5] px-4 py-3 text-[10px] text-[#b4232f]">
+              {
+                error
+              }
+            </div>
+          )}
+
+
+          <FormSection
+            title="Product identity"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Product name"
+                required
+              >
+                <input
+                  value={
+                    form.name
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "name",
+                        event.target.value,
+                      )
+                  }
+                  className={inputClass}
+                />
+              </Field>
+
+
+              <Field
+                label="SKU"
+                required
+              >
+                <input
+                  value={
+                    form.sku
+                  }
+                  disabled={
+                    Boolean(
+                      editingProduct,
+                    )
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "sku",
+                        event.target.value,
+                      )
+                  }
+                  className={`${inputClass} disabled:bg-[#f2f4f7] disabled:text-[#98a2b3]`}
+                />
+              </Field>
+
+
+              <Field
+                label="Part number"
+                required
+              >
+                <input
+                  value={
+                    form.partNumber
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "partNumber",
+                        event.target.value,
+                      )
+                  }
+                  className={inputClass}
+                />
+              </Field>
+
+
+              <Field
+                label="Warranty"
+              >
+                <input
+                  value={
+                    form.warranty
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "warranty",
+                        event.target.value,
+                      )
+                  }
+                  placeholder="e.g. 12 months"
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+
+          <FormSection
+            title="Catalog placement"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Brand"
+                required
+              >
+                <select
+                  value={
+                    form.brandId
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "brandId",
+                        event.target.value,
+                      )
+                  }
+                  className={inputClass}
+                >
+                  <option value="">
+                    Select brand
+                  </option>
+
+                  {brands.map(
+                    (
+                      brand,
+                    ) => (
+                      <option
+                        key={
+                          brand.id
+                        }
+                        value={
+                          brand.id
+                        }
+                      >
+                        {
+                          brand.name
+                        }
+                      </option>
+                    ),
+                  )}
+                </select>
+              </Field>
+
+
+              <Field
+                label="Category"
+                required
+              >
+                <select
+                  value={
+                    form.categoryId
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onCategoryChange(
+                        event.target.value,
+                      )
+                  }
+                  className={inputClass}
+                >
+                  <option value="">
+                    Select category
+                  </option>
+
+                  {categories.map(
+                    (
+                      category,
+                    ) => (
+                      <option
+                        key={
+                          category.id
+                        }
+                        value={
+                          category.id
+                        }
+                      >
+                        {
+                          category.name
+                        }
+                      </option>
+                    ),
+                  )}
+                </select>
+              </Field>
+
+
+              <Field
+                label="Subcategory"
+                required
+              >
+                <select
+                  value={
+                    form.subcategorySlug
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "subcategorySlug",
+                        event.target.value,
+                      )
+                  }
+                  className={inputClass}
+                >
+                  <option value="">
+                    Select subcategory
+                  </option>
+
+                  {availableSubcategories.map(
+                    (
+                      subcategory,
+                    ) => (
+                      <option
+                        key={
+                          subcategory.slug
+                        }
+                        value={
+                          subcategory.slug
+                        }
+                      >
+                        {
+                          subcategory.name
+                        }
+                      </option>
+                    ),
+                  )}
+                </select>
+              </Field>
+
+
+              {editingProduct && (
+                <Field
+                  label="Storefront status"
+                >
+                  <label className="flex h-10 items-center gap-3 rounded-[7px] border border-[#d0d5dd] px-3">
+                    <input
+                      type="checkbox"
+                      checked={
+                        form.isActive
+                      }
+                      onChange={
+                        (
+                          event,
+                        ) =>
+                          onChange(
+                            "isActive",
+                            event.target.checked,
+                          )
+                      }
+                    />
+
+                    <span className="text-[10px] font-medium text-[#344054]">
+                      Active
+                    </span>
+                  </label>
+                </Field>
+              )}
+            </div>
+          </FormSection>
+
+
+          <FormSection
+            title="Pricing & inventory"
+          >
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field
+                label="Regular price"
+                required
+              >
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={
+                    form.price
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "price",
+                        event.target.value,
+                      )
+                  }
+                  className={inputClass}
+                />
+              </Field>
+
+
+              <Field
+                label="Sale price"
+              >
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={
+                    form.salePrice
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "salePrice",
+                        event.target.value,
+                      )
+                  }
+                  placeholder="No sale"
+                  className={inputClass}
+                />
+              </Field>
+
+
+              <Field
+                label="Stock quantity"
+                required
+              >
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={
+                    form.stockQuantity
+                  }
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      onChange(
+                        "stockQuantity",
+                        event.target.value,
+                      )
+                  }
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+
+          <FormSection
+            title="Description"
+          >
+            <Field
+              label="Product description"
+              required
+            >
+              <textarea
+                rows={
+                  5
+                }
+                value={
+                  form.description
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    onChange(
+                      "description",
+                      event.target.value,
+                    )
+                }
+                className={`${inputClass} h-auto resize-y py-3`}
+              />
+            </Field>
+          </FormSection>
+
+
+          <FormSection
+            title="Images"
+          >
+            <Field
+              label="Image URLs"
+              hint="One URL per line, maximum 10."
+            >
+              <textarea
+                rows={
+                  4
+                }
+                value={
+                  form.imageUrls
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    onChange(
+                      "imageUrls",
+                      event.target.value,
+                    )
+                }
+                placeholder={"https://...\nhttps://..."}
+                className={`${inputClass} h-auto resize-y py-3`}
+              />
+            </Field>
+          </FormSection>
+
+
+          <FormSection
+            title="Specifications"
+          >
+            <Field
+              label="JSON specifications"
+              hint='Example: {"material":"Ceramic","position":"Front"}'
+            >
+              <textarea
+                rows={
+                  6
+                }
+                value={
+                  form.specifications
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    onChange(
+                      "specifications",
+                      event.target.value,
+                    )
+                }
+                className={`${inputClass} h-auto resize-y py-3 font-mono`}
+              />
+            </Field>
+          </FormSection>
+        </div>
+
+
+        <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-[#eaecf0] bg-white px-6 py-4">
+          <button
+            type="button"
+            disabled={
+              saving
+            }
+            onClick={
+              onClose
+            }
+            className="h-10 rounded-[7px] border border-[#d0d5dd] px-4 text-[9px] font-semibold text-[#344054] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+
+          <button
+            type="button"
+            disabled={
+              saving
+            }
+            onClick={
+              onSave
+            }
+            className="h-10 rounded-[7px] bg-[#e31b2d] px-5 text-[9px] font-semibold text-white disabled:opacity-50"
+          >
+            {
+              saving
+                ? "Saving..."
+                : editingProduct
+                  ? "Save changes"
+                  : "Create product"
+            }
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+
+function AdminNavItem({
+  href,
+  icon:
+    Icon,
+  label,
+  active =
+    false,
+}: {
+  href?:
+    string;
+
+  icon:
+    LucideIcon;
+
+  label:
+    string;
+
+  active?:
+    boolean;
+}) {
+  const className =
+    active
+      ? "flex h-10 items-center gap-3 rounded-[7px] bg-white/10 px-3 text-[9px] font-semibold text-white"
+      : "flex h-10 items-center gap-3 rounded-[7px] px-3 text-[9px] font-medium text-[#98a2b3] transition hover:bg-white/5 hover:text-white";
+
+
+  const content = (
+    <>
+      <Icon className="h-4 w-4" />
+
+      {
+        label
+      }
+    </>
+  );
+
+
+  if (href) {
+    return (
+      <Link
+        href={
+          href
+        }
+        className={
+          className
+        }
+      >
+        {
+          content
+        }
+      </Link>
+    );
+  }
+
+
+  return (
+    <div
+      className={
+        className
+      }
+    >
+      {
+        content
+      }
+    </div>
+  );
+}
+
+
+function MetricCard({
+  label,
+  value,
+  alert =
+    false,
+}: {
+  label:
+    string;
+
+  value:
+    number;
+
+  alert?:
+    boolean;
+}) {
+  return (
+    <div className="rounded-[12px] border border-[#dfe3e8] bg-white p-5">
+      <p className="text-[8px] font-semibold uppercase tracking-[0.1em] text-[#98a2b3]">
+        {
+          label
+        }
+      </p>
+
+      <p
+        className={
+          alert
+            ? "mt-2 text-[23px] font-bold text-[#d92d20]"
+            : "mt-2 text-[23px] font-bold text-[#101828]"
+        }
+      >
+        {
+          value.toLocaleString()
+        }
+      </p>
+    </div>
+  );
+}
+
+
+function TableHeading({
+  children,
+}: {
+  children:
+    ReactNode;
+}) {
+  return (
+    <th className="px-5 py-3 text-[8px] font-semibold uppercase tracking-[0.1em] text-[#98a2b3]">
+      {
+        children
+      }
+    </th>
+  );
+}
+
+
+function TableCell({
+  children,
+}: {
+  children:
+    ReactNode;
+}) {
+  return (
+    <td className="px-5 py-4 text-[9px] text-[#475467]">
+      {
+        children
+      }
+    </td>
+  );
+}
+
+
+function ProductStatusBadge({
+  active,
+}: {
+  active:
+    boolean;
+}) {
+  return (
+    <span
+      className={
+        active
+          ? "inline-flex rounded-full border border-[#abefc6] bg-[#ecfdf3] px-2.5 py-1 text-[8px] font-semibold text-[#067647]"
+          : "inline-flex rounded-full border border-[#d0d5dd] bg-[#f2f4f7] px-2.5 py-1 text-[8px] font-semibold text-[#667085]"
+      }
+    >
+      {
+        active
+          ? "Active"
+          : "Inactive"
+      }
+    </span>
+  );
+}
+
+
+function StockBadge({
+  quantity,
+}: {
+  quantity:
+    number;
+}) {
+  if (
+    quantity ===
+    0
+  ) {
+    return (
+      <span className="font-semibold text-[#b42318]">
+        Out of stock
+      </span>
+    );
+  }
+
+
+  if (
+    quantity <=
+    5
+  ) {
+    return (
+      <span className="font-semibold text-[#b54708]">
+        {
+          quantity
+        }{" "}
+        left
+      </span>
+    );
+  }
+
+
+  return (
+    <span className="font-semibold text-[#344054]">
+      {
+        quantity
+      }
+    </span>
+  );
+}
+
+
+function FormSection({
+  title,
+  children,
+}: {
+  title:
+    string;
+
+  children:
+    ReactNode;
+}) {
+  return (
+    <section>
+      <h3 className="mb-3 text-[9px] font-semibold uppercase tracking-[0.1em] text-[#667085]">
+        {
+          title
+        }
+      </h3>
+
+      {
+        children
+      }
+    </section>
+  );
+}
+
+
+function Field({
+  label,
+  hint,
+  required =
+    false,
+  children,
+}: {
+  label:
+    string;
+
+  hint?:
+    string;
+
+  required?:
+    boolean;
+
+  children:
+    ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[9px] font-semibold text-[#344054]">
+        {
+          label
+        }
+
+        {required && (
+          <span className="text-[#e31b2d]">
+            {" "}
+            *
+          </span>
+        )}
+      </span>
+
+      {
+        children
+      }
+
+      {hint && (
+        <span className="mt-1.5 block text-[8px] leading-4 text-[#98a2b3]">
+          {
+            hint
+          }
+        </span>
+      )}
+    </label>
+  );
+}
+
+
+const inputClass =
+  "h-10 w-full rounded-[7px] border border-[#d0d5dd] bg-white px-3 text-[10px] text-[#101828] outline-none focus:border-[#98a2b3]";
+
+
+function formatMoney(
+  value: number,
+) {
+  return new Intl.NumberFormat(
+    "en-US",
+    {
+      style:
+        "currency",
+
+      currency:
+        "USD",
+
+      maximumFractionDigits:
+        2,
+    },
+  ).format(
+    value,
+  );
+}
+
+
+function formatDate(
+  value: string,
+) {
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "2-digit",
+
+      year:
+        "numeric",
+    },
+  ).format(
+    new Date(
+      value,
+    ),
+  );
+}

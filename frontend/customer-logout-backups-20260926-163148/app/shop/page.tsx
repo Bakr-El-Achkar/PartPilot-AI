@@ -1,0 +1,3392 @@
+"use client";
+
+import Link from "next/link";
+import {
+  Suspense,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+import {
+  CarFront,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  Loader2,
+  PackageSearch,
+  Plus,
+  Search,
+  ShoppingCart,
+  SlidersHorizontal,
+  Star,
+  UserRound,
+} from "lucide-react";
+
+import {
+  ApiError,
+} from "@/lib/api";
+import {
+  getAccessToken,
+} from "@/lib/auth";
+import {
+  getVehicles,
+  type Vehicle,
+} from "@/lib/vehicles";
+import {
+  getBrands,
+  getCategories,
+  getCompatibleProducts,
+  getProducts,
+  type Brand,
+  type Category,
+  type Product,
+  type ProductQuery,
+  type ProductSort,
+} from "@/lib/products";
+import {
+  addToCart,
+  CART_UPDATED_EVENT,
+  getCartCount,
+} from "@/lib/cart";
+
+
+import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
+
+
+/* ============================================================
+   CONSTANTS
+============================================================ */
+
+const PRODUCTS_PER_PAGE = 8;
+
+
+/* ============================================================
+   PRODUCT IMAGE RULES
+
+   Priority:
+   1. product.images[0]
+   2. exact component rule below
+   3. Image unavailable
+
+   There is intentionally NO generic family-level image reuse.
+============================================================ */
+
+type PartImageRule = {
+  keywords: string[];
+  image: string;
+};
+
+
+const PART_IMAGE_RULES: PartImageRule[] = [
+  /* ==========================================================
+     STEERING / SUSPENSION
+     Local stable assets for the problem cards we identified.
+  ========================================================== */
+
+  {
+    keywords: [
+      "power steering pressure hose",
+      "power steering hose",
+      "steering pressure hose",
+      "steering hose",
+    ],
+    image:
+      "/product-parts/power-steering-pressure-hose.jpg",
+  },
+
+  {
+    keywords: [
+      "power steering pump",
+      "steering pump",
+    ],
+    image:
+      "/product-parts/power-steering-pump.jpg",
+  },
+
+  {
+    keywords: [
+      "outer tie rod end",
+      "outer tie rod",
+    ],
+    image:
+      "/product-parts/outer-tie-rod.jpg",
+  },
+
+  {
+    keywords: [
+      "inner tie rod end",
+      "inner tie rod",
+    ],
+    image:
+      "/product-parts/inner-tie-rod.svg",
+  },
+
+  {
+    keywords: [
+      "tie rod end",
+      "tie rod",
+    ],
+    image:
+      "/product-parts/outer-tie-rod.jpg",
+  },
+
+  {
+    keywords: [
+      "control arm",
+      "lower control arm",
+      "upper control arm",
+    ],
+    image:
+      "/product-parts/control-arm.jpg",
+  },
+
+  {
+    keywords: [
+      "strut assembly",
+      "gas strut assembly",
+      "quick strut",
+      "strut",
+    ],
+    image:
+      "/product-parts/strut-assembly.jpg",
+  },
+
+  {
+    keywords: [
+      "shock absorber",
+    ],
+    image:
+      "/product-parts/shock-absorber.jpg",
+  },
+
+  {
+    keywords: [
+      "wheel hub bearing",
+      "wheel bearing assembly",
+      "hub bearing",
+      "wheel bearing",
+      "hub assembly",
+      "wheel hub assembly",
+    ],
+    image:
+      "/product-parts/wheel-hub-bearing.jpg",
+  },
+
+  /* ==========================================================
+     BODY / DOOR
+  ========================================================== */
+
+  {
+    keywords: [
+      "door lock actuator",
+      "lock actuator",
+      "door actuator",
+    ],
+    image:
+      "https://i.ebayimg.com/images/g/yXAAAOSwh1NkZSlE/s-l1600.jpg",
+  },
+
+  /* ==========================================================
+     WHEEL HARDWARE
+  ========================================================== */
+
+  {
+    keywords: [
+      "wheel stud",
+      "lug stud",
+    ],
+    image:
+      "https://cdn11.bigcommerce.com/s-k9b7cqysdc/images/stencil/1280w/products/4630/20037/ALL44114__08701.1654003926.jpg?c=2",
+  },
+
+  /* ==========================================================
+     BRAKES
+     Brand-neutral local component references.
+  ========================================================== */
+
+  {
+    keywords: [
+      "brake fluid",
+    ],
+    image:
+      "/product-parts/brake-fluid.svg",
+  },
+
+  {
+    keywords: [
+      "wheel speed sensor",
+      "abs sensor",
+      "anti-lock brake sensor",
+    ],
+    image:
+      "/product-parts/abs-wheel-speed-sensor.svg",
+  },
+
+  {
+    keywords: [
+      "brake pad set",
+      "brake pads",
+      "brake pad",
+      "pad set",
+    ],
+    image:
+      "/product-parts/brake-pad.svg",
+  },
+
+  {
+    keywords: [
+      "brake rotor",
+      "brake disc",
+      "disc rotor",
+      "front rotor",
+      "rear rotor",
+    ],
+    image:
+      "/product-parts/brake-rotor.svg",
+  },
+
+  {
+    keywords: [
+      "brake caliper",
+      "front caliper",
+      "rear caliper",
+    ],
+    image:
+      "/product-parts/brake-caliper.svg",
+  },
+
+  {
+    keywords: [
+      "brake hose",
+      "hydraulic brake hose",
+    ],
+    image:
+      "/product-parts/brake-hose.svg",
+  },
+
+  {
+    keywords: [
+      "brake master cylinder",
+      "master cylinder",
+    ],
+    image:
+      "/product-parts/brake-master-cylinder.svg",
+  },
+
+  /* ==========================================================
+     SENSORS
+  ========================================================== */
+
+  {
+    keywords: [
+      "knock sensor",
+      "detonation sensor",
+    ],
+    image:
+      "https://http2.mlstatic.com/D_NQ_NP_937756-MLV70442296463_072023-O.webp",
+  },
+
+  {
+    keywords: [
+      "mass air flow sensor",
+      "maf sensor",
+      "air flow meter",
+    ],
+    image:
+      "https://cdn-vs1.newpartsricambi.com/img/p/3/4/5/6/4/34564-thickbox_default.jpg",
+  },
+
+  {
+    keywords: [
+      "camshaft position sensor",
+      "cam position sensor",
+    ],
+    image:
+      "https://i.ebayimg.com/images/g/sJsAAOSwNPxkWQ5N/s-l1200.jpg",
+  },
+
+  {
+    keywords: [
+      "crankshaft position sensor",
+      "crank position sensor",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1866/CFHH/SU9542/SU9542-01.jpg",
+  },
+
+  {
+    keywords: [
+      "oxygen sensor",
+      "o2 sensor",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1866/CFHH/234-4668/234-4668-01.jpg",
+  },
+
+  /* ==========================================================
+     IGNITION / ELECTRICAL
+  ========================================================== */
+
+  {
+    keywords: [
+      "ignition coil",
+      "coil pack",
+    ],
+    image:
+      "https://cdn.awsli.com.br/2500x2500/2695/2695989/produto/2628885593588945112.jpg",
+  },
+
+  {
+    keywords: [
+      "spark plug",
+      "spark plugs",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1711/CFHH/4469/4469-01.jpg",
+  },
+
+  {
+    keywords: [
+      "alternator",
+    ],
+    image:
+      "https://media.pkwteile.de/360_photos/15804065/h-preview.jpg",
+  },
+
+  {
+    keywords: [
+      "starter motor",
+      "starter",
+    ],
+    image:
+      "https://i5.walmartimages.com/seo/Starter-1-Compatible-with-2007-2012-Toyota-Yaris-1-5L-4-Cylinder-2008-2009-2010-2011_8a03c910-cf60-4e90-b8a6-367c33347cd6.b3d8839248408f10f8a021346c2f383e.jpeg",
+  },
+
+  {
+    keywords: [
+      "automotive battery",
+      "car battery",
+      "battery",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2142/CFHH/H5-DLG/H5-DLG-01.jpg",
+  },
+
+  /* ==========================================================
+     BALL JOINT
+  ========================================================== */
+
+  {
+    keywords: [
+      "ball joint",
+    ],
+    image:
+      "https://cdn.pkwteile.de/thumb?ccf=94077986&id=13054050&lng=en&m=0&n=1",
+  },
+
+  /* ==========================================================
+     FUEL
+  ========================================================== */
+
+  {
+    keywords: [
+      "fuel pump",
+      "electric fuel pump",
+    ],
+    image:
+      "https://shop4allparts.com/cdn/shop/files/dfp-0105-pic1_20_1.jpg?v=1770323560&width=416",
+  },
+
+  {
+    keywords: [
+      "fuel injector",
+      "injector",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1866/CFHH/FJ1002/FJ1002-01.jpg",
+  },
+
+  {
+    keywords: [
+      "fuel filter",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1674/CFHH/FF3504DL/FF3504DL-01.jpg",
+  },
+
+  /* ==========================================================
+     FILTERS
+  ========================================================== */
+
+  {
+    keywords: [
+      "oil filter",
+      "engine oil filter",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1674/CFHH/STP-S16/STP-S16-01.jpg",
+  },
+
+  {
+    keywords: [
+      "cabin air filter",
+      "cabin filter",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1728/CFHH/CAF1816P/CAF1816P-01.jpg",
+  },
+
+  {
+    keywords: [
+      "engine air filter",
+      "air filter",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1728/CFHH/SA9997/SA9997-01.jpg",
+  },
+
+  /* ==========================================================
+     COOLING
+  ========================================================== */
+
+  {
+    keywords: [
+      "upper radiator hose",
+      "lower radiator hose",
+      "radiator hose",
+      "coolant hose",
+    ],
+    image:
+      "https://contentinfo.autozone.com/znetcs/product-info/en/US/dyc/D71825/image/10/",
+  },
+
+  {
+    keywords: [
+      "water pump",
+      "engine water pump",
+      "premium water pump",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2208/CFHH/US8160/US8160-04.jpg",
+  },
+
+  {
+    keywords: [
+      "engine thermostat",
+      "thermostat",
+    ],
+    image:
+      "https://www.alxmic.com/wp-content/uploads/2025/01/thermostat-auto.jpg",
+  },
+
+  {
+    keywords: [
+      "engine radiator",
+      "radiator",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2172/CFHH/B730/B730-01.jpg?imwidth=1920",
+  },
+
+  /* ==========================================================
+     TRANSMISSION / DRIVETRAIN
+  ========================================================== */
+
+  {
+    keywords: [
+      "transmission filter",
+      "automatic transmission filter",
+      "transmission oil filter",
+    ],
+    image:
+      "https://contentinfo.autozone.com/znetcs/additional-prod-images/en/US/enr/FIL-D20001/5/image/10/",
+  },
+
+  {
+    keywords: [
+      "cv axle",
+      "cv shaft",
+      "constant velocity axle",
+      "drive axle",
+      "axle assembly",
+    ],
+    image:
+      "https://media.cdn.a-premium.com/2022/item/image/d32e0560de484239aee137b097732f6f_width_1600_height_600.jpg",
+  },
+
+  {
+    keywords: [
+      "universal joint",
+      "u-joint",
+      "u joint",
+    ],
+    image:
+      "https://fa.zjwgujoint.com/zjwgujoint/2024/05/30/1-2.png",
+  },
+
+  {
+    keywords: [
+      "transmission mount",
+      "gearbox mount",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/7948/CFHH/9890/9890-01.jpg",
+  },
+
+  /* ==========================================================
+     BELTS / TIMING
+  ========================================================== */
+
+  {
+    keywords: [
+      "timing belt",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1769/CFHH/TCKWP329/TCKWP329-01.jpg",
+  },
+
+  {
+    keywords: [
+      "timing chain kit",
+      "timing chain",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1769/CFHH/KT4036/KT4036-01.jpg",
+  },
+
+  {
+    keywords: [
+      "belt tensioner",
+      "tensioner pulley",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1769/CFHH/305392/305392-01.jpg",
+  },
+
+  {
+    keywords: [
+      "serpentine belt",
+      "drive belt",
+      "accessory belt",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1769/CFHH/4060885/4060885-01.jpg",
+  },
+
+  /* ==========================================================
+     ENGINE MOUNT
+  ========================================================== */
+
+  {
+    keywords: [
+      "engine mount",
+      "motor mount",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/7948/CFHH/9954/9954-01.jpg",
+  },
+
+  /* ==========================================================
+     HVAC
+  ========================================================== */
+
+  {
+    keywords: [
+      "a/c compressor",
+      "ac compressor",
+      "air conditioning compressor",
+    ],
+    image:
+      "https://cdn.autoersatzteile.de/thumb?id=8098153&lng=fr&m=0&n=3&rev=94078007",
+  },
+
+  /* ==========================================================
+     EXHAUST
+  ========================================================== */
+
+  {
+    keywords: [
+      "catalytic converter",
+      "catalyst",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2168/CFHH/16337/16337-01.jpg",
+  },
+
+  {
+    keywords: [
+      "exhaust muffler",
+      "muffler",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/2168/CFHH/18954/18954-01.jpg",
+  },
+
+  /* ==========================================================
+     LIGHTING
+  ========================================================== */
+
+  {
+    keywords: [
+      "headlight assembly",
+      "headlight",
+      "headlamp",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1890/CFHH/1592377/1592377-01.jpg",
+  },
+
+  {
+    keywords: [
+      "tail light",
+      "taillight",
+      "tail lamp",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1890/CFHH/1611389/1611389-01.jpg",
+  },
+
+  {
+    keywords: [
+      "fog light",
+      "fog lamp",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1890/CFHH/1571275/1571275-01.jpg",
+  },
+
+  /* ==========================================================
+     WIPERS
+  ========================================================== */
+
+  {
+    keywords: [
+      "wiper blade",
+      "windshield wiper",
+    ],
+    image:
+      "https://contentassets.autozone.com/product_image/USA/1736/CFHH/24A/24A-01.jpg",
+  },
+];
+
+
+/* ============================================================
+   TYPES
+============================================================ */
+
+type PriceRange =
+  | "any"
+  | "under50"
+  | "50to100"
+  | "100to200"
+  | "200plus";
+
+
+/* ============================================================
+   PAGE
+============================================================ */
+
+export default function ShopPage() {
+  return (
+    <Suspense
+      fallback={
+        <ShopPageFallback />
+      }
+    >
+      <ShopContent />
+    </Suspense>
+  );
+}
+
+
+/* ============================================================
+   SHOP CONTENT
+============================================================ */
+
+function ShopContent() {
+  const router =
+    useRouter();
+
+  const searchParams =
+    useSearchParams();
+
+
+  /* ==========================================================
+     URL STATE
+  ========================================================== */
+
+  const searchValue =
+    searchParams.get(
+      "search",
+    ) ?? "";
+
+  const categoryId =
+    searchParams.get(
+      "category_id",
+    ) ?? "";
+
+  const brandId =
+    searchParams.get(
+      "brand_id",
+    ) ?? "";
+
+  const priceRange =
+    normalizePriceRange(
+      searchParams.get(
+        "price",
+      ),
+    );
+
+  const inStock =
+    searchParams.get(
+      "in_stock",
+    ) === "true";
+
+  const fitsParam = searchParams.get("fits");
+
+  const sort =
+    normalizeSort(
+      searchParams.get(
+        "sort",
+      ),
+    );
+
+  const requestedVehicleId =
+    searchParams.get(
+      "vehicleId",
+    );
+
+  const requestedPage =
+    normalizePage(
+      searchParams.get(
+        "page",
+      ),
+    );
+
+
+  /* ==========================================================
+     LOCAL STATE
+  ========================================================== */
+
+  const [
+    searchInput,
+    setSearchInput,
+  ] = useState(
+    searchValue,
+  );
+
+  const [
+    products,
+    setProducts,
+  ] = useState<
+    Product[]
+  >([]);
+
+  const [
+    categories,
+    setCategories,
+  ] = useState<
+    Category[]
+  >([]);
+
+  const [
+    brands,
+    setBrands,
+  ] = useState<
+    Brand[]
+  >([]);
+
+  const [
+    vehicles,
+    setVehicles,
+  ] = useState<
+    Vehicle[]
+  >([]);
+
+  const [
+    compatibleProducts,
+    setCompatibleProducts,
+  ] = useState<
+    Product[]
+  >([]);
+
+  const [
+    productsLoading,
+    setProductsLoading,
+  ] = useState(
+    true,
+  );
+
+  const [
+    catalogLoading,
+    setCatalogLoading,
+  ] = useState(
+    true,
+  );
+
+  const [
+    garageLoading,
+    setGarageLoading,
+  ] = useState(
+    true,
+  );
+
+  const [
+    compatibilityLoading,
+    setCompatibilityLoading,
+  ] = useState(
+    false,
+  );
+
+  const [
+    productError,
+    setProductError,
+  ] = useState("");
+
+  const [
+    catalogError,
+    setCatalogError,
+  ] = useState("");
+
+  const [
+    garageError,
+    setGarageError,
+  ] = useState("");
+
+  const [
+    compatibilityError,
+    setCompatibilityError,
+  ] = useState("");
+
+  const [
+    refreshKey,
+    setRefreshKey,
+  ] = useState(
+    0,
+  );
+
+  const [
+    cartCount,
+    setCartCount,
+  ] = useState(
+    0,
+  );
+
+  const [
+    addedProductId,
+    setAddedProductId,
+  ] = useState<
+    string | null
+  >(null);
+
+
+  /* ==========================================================
+     QUERY HELPER
+  ========================================================== */
+
+  const replaceQuery =
+    useCallback(
+      (
+        updates: Record<
+          string,
+          string | null
+        >,
+      ) => {
+        const params =
+          new URLSearchParams(
+            searchParams.toString(),
+          );
+
+        Object.entries(
+          updates,
+        ).forEach(
+          ([
+            key,
+            value,
+          ]) => {
+            if (
+              value === null ||
+              value === ""
+            ) {
+              params.delete(
+                key,
+              );
+            } else {
+              params.set(
+                key,
+                value,
+              );
+            }
+          },
+        );
+
+        const query =
+          params.toString();
+
+        router.replace(
+          query
+            ? `/shop?${query}`
+            : "/shop",
+          {
+            scroll: false,
+          },
+        );
+      },
+      [
+        router,
+        searchParams,
+      ],
+    );
+
+
+  /* ==========================================================
+     SEARCH DEBOUNCE
+  ========================================================== */
+
+  useEffect(() => {
+    const timer =
+      window.setTimeout(
+        () => {
+          const value =
+            searchInput.trim();
+
+          if (
+            value ===
+            searchValue
+          ) {
+            return;
+          }
+
+          replaceQuery({
+            search:
+              value ||
+              null,
+            page: null,
+          });
+        },
+        350,
+      );
+
+    return () => {
+      window.clearTimeout(
+        timer,
+      );
+    };
+  }, [
+    replaceQuery,
+    searchInput,
+    searchValue,
+  ]);
+
+
+  /* ==========================================================
+     CART COUNT
+  ========================================================== */
+
+  useEffect(() => {
+    function syncCartCount() {
+      setCartCount(
+        getCartCount(),
+      );
+    }
+
+    syncCartCount();
+
+    window.addEventListener(
+      CART_UPDATED_EVENT,
+      syncCartCount,
+    );
+
+    window.addEventListener(
+      "storage",
+      syncCartCount,
+    );
+
+    return () => {
+      window.removeEventListener(
+        CART_UPDATED_EVENT,
+        syncCartCount,
+      );
+
+      window.removeEventListener(
+        "storage",
+        syncCartCount,
+      );
+    };
+  }, []);
+
+
+  /* ==========================================================
+     LOAD CATEGORIES + BRANDS
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function load() {
+      try {
+        setCatalogLoading(
+          true,
+        );
+
+        setCatalogError(
+          "",
+        );
+
+        const [
+          categoryResult,
+          brandResult,
+        ] =
+          await Promise.all([
+            getCategories(),
+            getBrands(),
+          ]);
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setCategories(
+          categoryResult,
+        );
+
+        setBrands(
+          brandResult,
+        );
+      } catch (error) {
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setCatalogError(
+          error instanceof
+            ApiError
+            ? error.message
+            : "Unable to load catalog filters.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setCatalogLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    refreshKey,
+  ]);
+
+
+  /* ==========================================================
+     PRODUCT QUERY
+  ========================================================== */
+
+  const productQuery =
+    useMemo<
+      ProductQuery
+    >(() => {
+      const query:
+        ProductQuery = {
+        sort,
+      };
+
+      if (
+        searchValue
+      ) {
+        query.search =
+          searchValue;
+      }
+
+      if (
+        categoryId
+      ) {
+        query.category_id =
+          categoryId;
+      }
+
+      if (
+        brandId
+      ) {
+        query.brand_id =
+          brandId;
+      }
+
+      const prices =
+        getPriceRangeValues(
+          priceRange,
+        );
+
+      if (
+        prices.min !==
+        undefined
+      ) {
+        query.min_price =
+          prices.min;
+      }
+
+      if (
+        prices.max !==
+        undefined
+      ) {
+        query.max_price =
+          prices.max;
+      }
+
+      if (
+        inStock
+      ) {
+        query.in_stock =
+          true;
+      }
+
+      return query;
+    }, [
+      sort,
+      searchValue,
+      categoryId,
+      brandId,
+      priceRange,
+      inStock,
+    ]);
+
+
+  /* ==========================================================
+     LOAD PRODUCTS
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function load() {
+      try {
+        setProductsLoading(
+          true,
+        );
+
+        setProductError(
+          "",
+        );
+
+        const result =
+          await getProducts(
+            productQuery,
+          );
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setProducts(
+          result,
+        );
+      } catch (error) {
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setProductError(
+          error instanceof
+            ApiError
+            ? error.message
+            : "Unable to load products.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setProductsLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    productQuery,
+    refreshKey,
+  ]);
+
+
+  /* ==========================================================
+     LOAD GARAGE
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function load() {
+      const token =
+        getAccessToken();
+
+      if (
+        !token
+      ) {
+        if (
+          !cancelled
+        ) {
+          setVehicles(
+            [],
+          );
+
+          setGarageError(
+            "",
+          );
+
+          setGarageLoading(
+            false,
+          );
+        }
+
+        return;
+      }
+
+      const accessToken =
+        token;
+
+      try {
+        setGarageLoading(
+          true,
+        );
+
+        setGarageError(
+          "",
+        );
+
+        const result =
+          await getVehicles(
+            accessToken,
+          );
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setVehicles(
+          result,
+        );
+      } catch (error) {
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setVehicles(
+          [],
+        );
+
+        setGarageError(
+          error instanceof
+            ApiError
+            ? error.message
+            : "Unable to load your Garage.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setGarageLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    refreshKey,
+  ]);
+
+
+  /* ==========================================================
+     SELECT VEHICLE
+  ========================================================== */
+
+  const selectedVehicle =
+    useMemo(() => {
+      if (
+        requestedVehicleId
+      ) {
+        const requested =
+          vehicles.find(
+            (vehicle) =>
+              vehicle.id ===
+              requestedVehicleId,
+          );
+
+        if (
+          requested
+        ) {
+          return requested;
+        }
+      }
+
+      return (
+        vehicles.find(
+          (vehicle) =>
+            vehicle.is_active,
+        ) ?? null
+      );
+    }, [
+      requestedVehicleId,
+      vehicles,
+    ]);
+
+
+  /* ==========================================================
+     LOAD COMPATIBILITY
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function load() {
+      const token =
+        getAccessToken();
+
+      const vehicle =
+        selectedVehicle;
+
+      if (
+        !token ||
+        !vehicle
+      ) {
+        if (
+          !cancelled
+        ) {
+          setCompatibleProducts(
+            [],
+          );
+
+          setCompatibilityError(
+            "",
+          );
+
+          setCompatibilityLoading(
+            false,
+          );
+        }
+
+        return;
+      }
+
+      const accessToken =
+        token;
+
+      const vehicleId =
+        vehicle.id;
+
+      try {
+        setCompatibilityLoading(
+          true,
+        );
+
+        setCompatibilityError(
+          "",
+        );
+
+        const result =
+          await getCompatibleProducts(
+            accessToken,
+            vehicleId,
+          );
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setCompatibleProducts(
+          result,
+        );
+      } catch (error) {
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        setCompatibleProducts(
+          [],
+        );
+
+        setCompatibilityError(
+          error instanceof
+            ApiError
+            ? error.message
+            : "Unable to load vehicle compatibility.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setCompatibilityLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    selectedVehicle,
+    refreshKey,
+  ]);
+
+
+  /* ==========================================================
+     COMPATIBLE IDS
+  ========================================================== */
+
+  const compatibleIds =
+    useMemo(
+      () =>
+        new Set(
+          compatibleProducts.map(
+            (product) =>
+              product.id,
+          ),
+        ),
+      [
+        compatibleProducts,
+      ],
+    );
+
+
+  const fitsOnly =
+    Boolean(
+      selectedVehicle,
+    ) &&
+    fitsParam !== "false" &&
+    !compatibilityError;
+
+
+  const visibleProducts =
+    useMemo(() => {
+      if (
+        !fitsOnly
+      ) {
+        return products;
+      }
+
+      return products.filter(
+        (product) =>
+          compatibleIds.has(
+            product.id,
+          ),
+      );
+    }, [
+      products,
+      fitsOnly,
+      compatibleIds,
+    ]);
+
+
+  /* ==========================================================
+     PAGINATION
+  ========================================================== */
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        visibleProducts.length /
+          PRODUCTS_PER_PAGE,
+      ),
+    );
+
+  const currentPage =
+    Math.min(
+      requestedPage,
+      totalPages,
+    );
+
+  const pageStart =
+    (
+      currentPage -
+      1
+    ) *
+    PRODUCTS_PER_PAGE;
+
+  const pageEnd =
+    Math.min(
+      pageStart +
+        PRODUCTS_PER_PAGE,
+      visibleProducts.length,
+    );
+
+  const paginatedProducts =
+    visibleProducts.slice(
+      pageStart,
+      pageEnd,
+    );
+
+
+  /* ==========================================================
+     BRAND LOOKUP
+  ========================================================== */
+
+  const brandNames =
+    useMemo(
+      () =>
+        new Map(
+          brands.map(
+            (brand) => [
+              brand.id,
+              brand.name,
+            ],
+          ),
+        ),
+      [
+        brands,
+      ],
+    );
+
+
+  /* ==========================================================
+     CART ACTION
+  ========================================================== */
+
+  function handleAddToCart(
+    product: Product,
+  ) {
+    if (
+      product.stock_quantity <=
+      0
+    ) {
+      return;
+    }
+
+    addToCart(
+      product,
+    );
+
+    setCartCount(
+      getCartCount(),
+    );
+
+    setAddedProductId(
+      product.id,
+    );
+
+    window.setTimeout(
+      () => {
+        setAddedProductId(
+          (current) =>
+            current ===
+            product.id
+              ? null
+              : current,
+        );
+      },
+      900,
+    );
+  }
+
+
+  /* ==========================================================
+     CLEAR FILTERS
+  ========================================================== */
+
+  function clearFilters() {
+    setSearchInput(
+      "",
+    );
+
+    const params =
+      new URLSearchParams(
+        searchParams.toString(),
+      );
+
+    [
+      "search",
+      "category_id",
+      "brand_id",
+      "price",
+      "in_stock",
+      "fits",
+      "sort",
+      "page",
+    ].forEach(
+      (key) => {
+        params.delete(
+          key,
+        );
+      },
+    );
+
+    const query =
+      params.toString();
+
+    router.replace(
+      query
+        ? `/shop?${query}`
+        : "/shop",
+      {
+        scroll: false,
+      },
+    );
+  }
+
+
+  /* ==========================================================
+     PAGE CHANGE
+  ========================================================== */
+
+  function changePage(
+    nextPage: number,
+  ) {
+    const safe =
+      Math.min(
+        Math.max(
+          nextPage,
+          1,
+        ),
+        totalPages,
+      );
+
+    replaceQuery({
+      page:
+        safe === 1
+          ? null
+          : String(
+              safe,
+            ),
+    });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+
+  /* ==========================================================
+     FILTER PANEL
+  ========================================================== */
+
+  const filterPanel = (
+    <FilterPanel
+      categories={
+        categories
+      }
+      brands={
+        brands
+      }
+      catalogLoading={
+        catalogLoading
+      }
+      categoryId={
+        categoryId
+      }
+      brandId={
+        brandId
+      }
+      priceRange={
+        priceRange
+      }
+      inStock={
+        inStock
+      }
+      fitsOnly={
+        fitsOnly
+      }
+      selectedVehicle={
+        selectedVehicle
+      }
+      compatibilityLoading={
+        compatibilityLoading
+      }
+      compatibilityError={
+        compatibilityError
+      }
+      onCategoryChange={(
+        value,
+      ) => {
+        replaceQuery({
+          category_id:
+            value ||
+            null,
+          page: null,
+        });
+      }}
+      onBrandChange={(
+        value,
+      ) => {
+        replaceQuery({
+          brand_id:
+            value ||
+            null,
+          page: null,
+        });
+      }}
+      onPriceChange={(
+        value,
+      ) => {
+        replaceQuery({
+          price:
+            value ===
+            "any"
+              ? null
+              : value,
+          page: null,
+        });
+      }}
+      onStockChange={(
+        checked,
+      ) => {
+        replaceQuery({
+          in_stock:
+            checked
+              ? "true"
+              : null,
+          page: null,
+        });
+      }}
+      onFitsChange={(
+        checked,
+      ) => {
+        replaceQuery({
+          fits: checked ? "true" : "false",
+          page: null,
+        });
+      }}
+      onClear={
+        clearFilters
+      }
+    />
+  );
+
+
+  /* ==========================================================
+     RENDER
+  ========================================================== */
+
+  return (
+    <main className="min-h-screen bg-[#f5f7f9] text-[#101828]">
+      <VehnexaNavbar
+        cartCount={
+          cartCount
+        }
+      />
+
+      <section className="mx-auto max-w-[1320px] px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-[31px] font-bold tracking-[-0.035em] text-[#101828]">
+              Parts Marketplace
+            </h1>
+
+            <p className="mt-2 text-[13px] text-[#667085]">
+              Browse 500+ catalog items and filter by the vehicle saved in My Garage.
+            </p>
+          </div>
+
+          <div className="relative w-full lg:w-[340px]">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
+
+            <input
+              id="shop-search"
+              type="search"
+              value={
+                searchInput
+              }
+              onChange={(
+                event,
+              ) => {
+                setSearchInput(
+                  event.target.value,
+                );
+              }}
+              placeholder="Search parts"
+              className="h-11 w-full rounded-[5px] border border-[#d0d5dd] bg-white pl-10 pr-3 text-[12px] text-[#344054] outline-none transition placeholder:text-[#98a2b3] focus:border-[#6b9fe8] focus:ring-2 focus:ring-[#dbeafe]"
+            />
+          </div>
+        </div>
+
+
+        <div className="mt-5">
+          {garageLoading ? (
+            <div className="h-[82px] animate-pulse rounded-[6px] border border-[#dce8f8] bg-[#f3f7fc]" />
+          ) : selectedVehicle ? (
+            <VehicleBanner
+              vehicle={
+                selectedVehicle
+              }
+              filteringCompatible={
+                fitsOnly
+              }
+            />
+          ) : (
+            <NoVehicleBanner />
+          )}
+        </div>
+
+
+        {garageError && (
+          <div className="mt-3 rounded-[5px] border border-[#f0dfb7] bg-[#fffaf0] px-4 py-3 text-[11px] text-[#8a6116]">
+            Your Shop is still available, but Vehnexa could not load your Garage:{" "}
+            {garageError}
+          </div>
+        )}
+
+
+        {compatibilityError && (
+          <div className="mt-3 flex flex-col gap-2 rounded-[5px] border border-[#f0dfb7] bg-[#fffaf0] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[11px] text-[#8a6116]">
+              Compatibility filtering is temporarily unavailable. Ordinary products are still shown.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setRefreshKey(
+                  (value) =>
+                    value + 1,
+                );
+              }}
+              className="text-[11px] font-semibold text-[#b54708]"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+
+        <details className="mt-5 rounded-[6px] border border-[#dfe3e8] bg-white lg:hidden">
+          <summary className="flex h-12 cursor-pointer list-none items-center justify-between px-4 text-[12px] font-semibold text-[#344054] [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              Filters
+            </span>
+
+            <ChevronDown className="h-4 w-4 text-[#98a2b3]" />
+          </summary>
+
+          <div className="border-t border-[#eaecf0] p-4">
+            {filterPanel}
+          </div>
+        </details>
+
+
+        <div className="mt-5 grid gap-5 lg:grid-cols-[225px_minmax(0,1fr)]">
+          <aside className="hidden lg:block">
+            <div className="rounded-[6px] border border-[#dfe3e8] bg-white p-4">
+              {filterPanel}
+            </div>
+          </aside>
+
+
+          <section className="min-w-0">
+            <div className="flex flex-col gap-3 rounded-[6px] border border-[#dfe3e8] bg-white px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-[16px] font-bold text-[#101828]">
+                  {fitsOnly ? "Compatible products" : "All products"}
+                </h2>
+
+                <p className="mt-1 text-[10px] text-[#667085]">
+                  {productsLoading
+                    ? "Loading catalog..."
+                    : visibleProducts.length === 0
+                      ? "0 products shown"
+                      : `Showing ${pageStart + 1}–${pageEnd} of ${visibleProducts.length} products`}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="hidden text-[10px] font-medium text-[#667085] sm:inline">
+                  Sort:
+                </span>
+
+                <div className="relative">
+                  <select
+                    value={
+                      sort
+                    }
+                    onChange={(
+                      event,
+                    ) => {
+                      const next =
+                        normalizeSort(
+                          event.target.value,
+                        );
+
+                      replaceQuery({
+                        sort:
+                          next ===
+                          "recommended"
+                            ? null
+                            : next,
+                        page: null,
+                      });
+                    }}
+                    className="h-9 appearance-none rounded-[4px] border border-[#d0d5dd] bg-white pl-3 pr-8 text-[11px] font-medium text-[#344054] outline-none"
+                  >
+                    <option value="recommended">
+                      Recommended
+                    </option>
+
+                    <option value="price_asc">
+                      Price: Low to High
+                    </option>
+
+                    <option value="price_desc">
+                      Price: High to Low
+                    </option>
+
+                    <option value="rating">
+                      Top Rated
+                    </option>
+
+                    <option value="newest">
+                      Newest
+                    </option>
+                  </select>
+
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#98a2b3]" />
+                </div>
+              </div>
+            </div>
+
+
+            {catalogError && (
+              <div className="mt-4 flex items-center justify-between rounded-[6px] border border-[#f5c2c7] bg-[#fff5f6] px-4 py-3">
+                <p className="text-[11px] text-[#b42318]">
+                  {catalogError}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRefreshKey(
+                      (value) =>
+                        value + 1,
+                    );
+                  }}
+                  className="text-[11px] font-semibold text-[#e31b2d]"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+
+            {productError && (
+              <ProductErrorState
+                message={
+                  productError
+                }
+                onRetry={() => {
+                  setRefreshKey(
+                    (value) =>
+                      value + 1,
+                  );
+                }}
+              />
+            )}
+
+
+            {!productError &&
+              (
+                productsLoading ||
+                (
+                  fitsOnly &&
+                  compatibilityLoading
+                )
+              ) && (
+                <ProductGridLoading />
+              )}
+
+
+            {!productError &&
+              !productsLoading &&
+              !compatibilityLoading &&
+              visibleProducts.length ===
+                0 && (
+                <EmptyProducts
+                  compatibility={
+                    fitsOnly
+                  }
+                  onClear={
+                    clearFilters
+                  }
+                />
+              )}
+
+
+            {!productError &&
+              !productsLoading &&
+              !(
+                fitsOnly &&
+                compatibilityLoading
+              ) &&
+              paginatedProducts.length >
+                0 && (
+                <>
+                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {paginatedProducts.map(
+                      (product) => (
+                        <ProductCard
+                          key={
+                            product.id
+                          }
+                          product={
+                            product
+                          }
+                          brandName={
+                            brandNames.get(
+                              product.brand_id,
+                            ) ??
+                            "VEHNEXA"
+                          }
+                          compatible={
+                            compatibleIds.has(
+                              product.id,
+                            )
+                          }
+                          added={
+                            addedProductId ===
+                            product.id
+                          }
+                          onAdd={
+                            handleAddToCart
+                          }
+                        />
+                      ),
+                    )}
+                  </div>
+
+                  <Pagination
+                    currentPage={
+                      currentPage
+                    }
+                    totalPages={
+                      totalPages
+                    }
+                    totalItems={
+                      visibleProducts.length
+                    }
+                    pageStart={
+                      pageStart
+                    }
+                    pageEnd={
+                      pageEnd
+                    }
+                    onChange={
+                      changePage
+                    }
+                  />
+                </>
+              )}
+
+
+            {selectedVehicle && (
+              <p className="mt-5 text-[10px] leading-5 text-[#98a2b3]">
+                Vehicle compatibility shown in this development catalog is based on Vehnexa demo fitment data and is not OEM-certified. Always verify fitment before installation.
+              </p>
+            )}
+          </section>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+
+/* ============================================================
+   FILTER PANEL
+============================================================ */
+
+function FilterPanel({
+  categories,
+  brands,
+  catalogLoading,
+  categoryId,
+  brandId,
+  priceRange,
+  inStock,
+  fitsOnly,
+  selectedVehicle,
+  compatibilityLoading,
+  compatibilityError,
+  onCategoryChange,
+  onBrandChange,
+  onPriceChange,
+  onStockChange,
+  onFitsChange,
+  onClear,
+}: {
+  categories: Category[];
+  brands: Brand[];
+  catalogLoading: boolean;
+  categoryId: string;
+  brandId: string;
+  priceRange: PriceRange;
+  inStock: boolean;
+  fitsOnly: boolean;
+  selectedVehicle:
+    | Vehicle
+    | null;
+  compatibilityLoading: boolean;
+  compatibilityError: string;
+  onCategoryChange: (
+    value: string,
+  ) => void;
+  onBrandChange: (
+    value: string,
+  ) => void;
+  onPriceChange: (
+    value: PriceRange,
+  ) => void;
+  onStockChange: (
+    value: boolean,
+  ) => void;
+  onFitsChange: (
+    value: boolean,
+  ) => void;
+  onClear: () => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-[13px] font-bold text-[#101828]">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-[#667085]" />
+          Filters
+        </h2>
+
+        <button
+          type="button"
+          onClick={
+            onClear
+          }
+          className="text-[10px] font-semibold text-[#e31b2d]"
+        >
+          Clear
+        </button>
+      </div>
+
+
+      <FilterGroup
+        label="Category"
+      >
+        <SelectField
+          value={
+            categoryId
+          }
+          disabled={
+            catalogLoading
+          }
+          onChange={
+            onCategoryChange
+          }
+        >
+          <option value="">
+            All categories
+          </option>
+
+          {categories
+            .filter(
+              (category) =>
+                category.is_active,
+            )
+            .map(
+              (category) => (
+                <option
+                  key={
+                    category.id
+                  }
+                  value={
+                    category.id
+                  }
+                >
+                  {category.name}
+                </option>
+              ),
+            )}
+        </SelectField>
+      </FilterGroup>
+
+
+      <FilterGroup
+        label="Brand"
+      >
+        <SelectField
+          value={
+            brandId
+          }
+          disabled={
+            catalogLoading
+          }
+          onChange={
+            onBrandChange
+          }
+        >
+          <option value="">
+            All brands
+          </option>
+
+          {brands
+            .filter(
+              (brand) =>
+                brand.is_active,
+            )
+            .map(
+              (brand) => (
+                <option
+                  key={
+                    brand.id
+                  }
+                  value={
+                    brand.id
+                  }
+                >
+                  {brand.name}
+                </option>
+              ),
+            )}
+        </SelectField>
+      </FilterGroup>
+
+
+      <FilterGroup
+        label="Price"
+      >
+        <SelectField
+          value={
+            priceRange
+          }
+          onChange={(
+            value,
+          ) => {
+            onPriceChange(
+              normalizePriceRange(
+                value,
+              ),
+            );
+          }}
+        >
+          <option value="any">
+            Any price
+          </option>
+
+          <option value="under50">
+            Under $50
+          </option>
+
+          <option value="50to100">
+            $50 – $100
+          </option>
+
+          <option value="100to200">
+            $100 – $200
+          </option>
+
+          <option value="200plus">
+            $200+
+          </option>
+        </SelectField>
+      </FilterGroup>
+
+
+      <FilterGroup
+        label="Availability"
+      >
+        <label className="flex cursor-pointer items-center gap-2.5 text-[11px] text-[#475467]">
+          <input
+            type="checkbox"
+            checked={
+              inStock
+            }
+            onChange={(
+              event,
+            ) => {
+              onStockChange(
+                event.target.checked,
+              );
+            }}
+            className="h-3.5 w-3.5 accent-[#e31b2d]"
+          />
+
+          In stock
+        </label>
+      </FilterGroup>
+
+
+      <FilterGroup
+        label="Compatibility"
+      >
+        <label className="flex items-center gap-2.5 text-[11px] text-[#475467]">
+          <input
+            type="checkbox"
+            checked={
+              fitsOnly
+            }
+            disabled={
+              !selectedVehicle ||
+              Boolean(
+                compatibilityError,
+              ) ||
+              compatibilityLoading
+            }
+            onChange={(
+              event,
+            ) => {
+              onFitsChange(
+                event.target.checked,
+              );
+            }}
+            className="h-3.5 w-3.5 accent-[#e31b2d]"
+          />
+
+          Fits my vehicle
+
+          {compatibilityLoading && (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          )}
+        </label>
+      </FilterGroup>
+    </>
+  );
+}
+
+
+function FilterGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-4 border-t border-[#eaecf0] pt-4">
+      <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.07em] text-[#667085]">
+        {label}
+      </label>
+
+      {children}
+    </div>
+  );
+}
+
+
+function SelectField({
+  value,
+  disabled = false,
+  onChange,
+  children,
+}: {
+  value: string;
+  disabled?: boolean;
+  onChange: (
+    value: string,
+  ) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={
+          value
+        }
+        disabled={
+          disabled
+        }
+        onChange={(
+          event,
+        ) => {
+          onChange(
+            event.target.value,
+          );
+        }}
+        className="h-10 w-full appearance-none rounded-[4px] border border-[#d0d5dd] bg-white pl-3 pr-8 text-[11px] text-[#344054] outline-none"
+      >
+        {children}
+      </select>
+
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#98a2b3]" />
+    </div>
+  );
+}
+
+
+/* ============================================================
+   VEHICLE BANNERS
+============================================================ */
+
+function VehicleBanner({
+  vehicle,
+  filteringCompatible,
+}: {
+  vehicle: Vehicle;
+  filteringCompatible: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-[6px] border border-[#cfe0f5] bg-[#f3f7fc] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-[5px] border border-[#d5e3f3] bg-white">
+          <CarFront className="h-5 w-5 text-[#346aa5]" />
+        </div>
+
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#4b79a9]">
+            {vehicle.is_active
+              ? "ACTIVE VEHICLE"
+              : "GARAGE VEHICLE"}
+          </p>
+
+          <div className="flex items-center gap-3">
+            <h2 className="text-[14px] font-bold text-[#183b5d]">
+              {vehicle.year}{" "}
+              {vehicle.make}{" "}
+              {vehicle.model}
+            </h2>
+
+            <span className="text-[10px] text-[#64809d]">
+              {vehicle.engine}
+            </span>
+          </div>
+
+          <p className="mt-1 text-[10px] text-[#64809d]">
+            {filteringCompatible
+              ? "Showing products marked compatible with this vehicle"
+              : "Compatibility filter is currently off"}
+          </p>
+        </div>
+      </div>
+
+      <Link
+        href="/account/garage"
+        className="flex h-9 items-center justify-center rounded-[4px] border border-[#a9c5e3] bg-white px-4 text-[10px] font-semibold text-[#346aa5]"
+      >
+        Change vehicle
+      </Link>
+    </div>
+  );
+}
+
+
+function NoVehicleBanner() {
+  return (
+    <div className="rounded-[6px] border border-[#e1e5e9] bg-white px-4 py-4">
+      <p className="text-[12px] font-semibold text-[#344054]">
+        Add or select a vehicle in My Garage to enable compatibility filtering.
+      </p>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   PRODUCT CARD
+============================================================ */
+
+function ProductCard({
+  product,
+  brandName,
+  compatible,
+  added,
+  onAdd,
+}: {
+  product: Product;
+  brandName: string;
+  compatible: boolean;
+  added: boolean;
+  onAdd: (
+    product: Product,
+  ) => void;
+}) {
+  const price =
+    product.sale_price ??
+    product.price;
+
+  const sale =
+    product.sale_price !=
+      null &&
+    product.sale_price <
+      product.price;
+
+  const outOfStock =
+    product.stock_quantity <=
+    0;
+
+  const realProductImage =
+    product.images[0]?.trim() ||
+    null;
+
+  const image =
+    getProductImage(
+      product,
+    );
+
+  const reference =
+    !realProductImage &&
+    Boolean(
+      image,
+    );
+
+  const detailHref =
+    `/product/${product.slug}`;
+
+
+  return (
+    <article className="group overflow-hidden rounded-[6px] border border-[#dfe3e8] bg-white transition hover:border-[#c7ced7] hover:shadow-[0_6px_20px_rgba(16,24,40,0.08)]">
+      <Link
+        href={
+          detailHref
+        }
+        className="relative flex h-[175px] items-center justify-center overflow-hidden bg-[#f7f8fa]"
+        aria-label={`View ${product.name}`}
+      >
+        {compatible && (
+          <span className="absolute left-2.5 top-2.5 z-20 rounded-full border border-[#b7e4c8] bg-[#ecfdf3] px-2.5 py-1 text-[9px] font-bold text-[#16804a]">
+            Fits
+          </span>
+        )}
+
+        {outOfStock && (
+          <span className="absolute right-2.5 top-2.5 z-20 rounded-full bg-white px-2.5 py-1 text-[9px] font-semibold text-[#667085]">
+            Out of stock
+          </span>
+        )}
+
+        {image ? (
+          <ProductImage
+            src={
+              image
+            }
+            alt={
+              product.name
+            }
+            reference={
+              reference
+            }
+          />
+        ) : (
+          <ImageUnavailable />
+        )}
+      </Link>
+
+
+      <div className="p-4">
+        <p className="truncate text-[10px] font-bold uppercase tracking-[0.08em] text-[#8d98a8]">
+          {brandName}
+        </p>
+
+        <Link
+          href={
+            detailHref
+          }
+          className="block"
+        >
+          <h3 className="mt-1.5 line-clamp-2 min-h-[38px] text-[12px] font-semibold leading-[19px] text-[#1d2939] transition hover:text-[#e31b2d]">
+            {product.name}
+          </h3>
+        </Link>
+
+        <div className="mt-2.5 flex items-center gap-1.5">
+          <Star className="h-3.5 w-3.5 fill-[#f4b740] text-[#f4b740]" />
+
+          <span className="text-[10px] font-semibold text-[#475467]">
+            {product.rating_average.toFixed(
+              1,
+            )}
+          </span>
+
+          <span className="text-[10px] text-[#98a2b3]">
+            ({product.review_count})
+          </span>
+        </div>
+
+        <div className="mt-3.5 flex items-end justify-between gap-3">
+          <div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[16px] font-bold text-[#101828]">
+                $
+                {price.toFixed(
+                  2,
+                )}
+              </span>
+
+              {sale && (
+                <span className="text-[10px] text-[#98a2b3] line-through">
+                  $
+                  {product.price.toFixed(
+                    2,
+                  )}
+                </span>
+              )}
+            </div>
+
+            <p className="mt-1 text-[10px] text-[#667085]">
+              {outOfStock
+                ? "Currently unavailable"
+                : `${product.stock_quantity} in stock`}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={
+              outOfStock
+            }
+            onClick={() => {
+              onAdd(
+                product,
+              );
+            }}
+            className={`flex h-9 w-9 items-center justify-center rounded-[4px] text-white transition ${
+              outOfStock
+                ? "cursor-not-allowed bg-[#cfd4dc]"
+                : added
+                  ? "bg-[#16804a]"
+                  : "bg-[#e31b2d] hover:bg-[#c81424]"
+            }`}
+            aria-label={`Add ${product.name} to cart`}
+          >
+            {added ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+
+/* ============================================================
+   PRODUCT IMAGE
+============================================================ */
+
+function ProductImage({
+  src,
+  alt,
+  reference,
+}: {
+  src: string;
+  alt: string;
+  reference: boolean;
+}) {
+  const [
+    failed,
+    setFailed,
+  ] = useState(
+    false,
+  );
+
+  if (
+    failed
+  ) {
+    return (
+      <ImageUnavailable />
+    );
+  }
+
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={
+          src
+        }
+        alt={
+          alt
+        }
+        loading="lazy"
+        onError={() => {
+          setFailed(
+            true,
+          );
+        }}
+        className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
+      />
+
+      {reference && (
+        <span className="absolute bottom-2 left-2 rounded-[3px] border border-[#e4e7ec] bg-white/95 px-2 py-1 text-[8px] font-medium text-[#667085]">
+          Reference image
+        </span>
+      )}
+    </>
+  );
+}
+
+
+function ImageUnavailable() {
+  return (
+    <div className="flex flex-col items-center justify-center">
+      <PackageSearch className="h-8 w-8 text-[#c3cad3]" />
+
+      <span className="mt-2 text-[10px] text-[#98a2b3]">
+        Image unavailable
+      </span>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   PAGINATION
+============================================================ */
+
+function Pagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  pageStart,
+  pageEnd,
+  onChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  pageStart: number;
+  pageEnd: number;
+  onChange: (
+    page: number,
+  ) => void;
+}) {
+  if (
+    totalPages <=
+    1
+  ) {
+    return null;
+  }
+
+  const pages =
+    getPaginationPages(
+      currentPage,
+      totalPages,
+    );
+
+  return (
+    <div className="mt-5 flex flex-col gap-3 rounded-[6px] border border-[#dfe3e8] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-[10px] text-[#667085]">
+        Showing {pageStart + 1}–{pageEnd} of {totalItems}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          disabled={
+            currentPage ===
+            1
+          }
+          onClick={() => {
+            onChange(
+              currentPage -
+                1,
+            );
+          }}
+          className="flex h-8 items-center gap-1 rounded-[4px] border border-[#d0d5dd] px-2.5 text-[10px] disabled:opacity-40"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+          Previous
+        </button>
+
+        {pages.map(
+          (
+            page,
+            index,
+          ) =>
+            page ===
+            "ellipsis" ? (
+              <span
+                key={`ellipsis-${index}`}
+                className="px-2 text-[11px] text-[#98a2b3]"
+              >
+                …
+              </span>
+            ) : (
+              <button
+                type="button"
+                key={
+                  page
+                }
+                onClick={() => {
+                  onChange(
+                    page,
+                  );
+                }}
+                className={`h-8 min-w-8 rounded-[4px] border px-2 text-[10px] font-semibold ${
+                  page ===
+                  currentPage
+                    ? "border-[#e31b2d] bg-[#e31b2d] text-white"
+                    : "border-[#d0d5dd] bg-white text-[#475467]"
+                }`}
+              >
+                {page}
+              </button>
+            ),
+        )}
+
+        <button
+          type="button"
+          disabled={
+            currentPage ===
+            totalPages
+          }
+          onClick={() => {
+            onChange(
+              currentPage +
+                1,
+            );
+          }}
+          className="flex h-8 items-center gap-1 rounded-[4px] border border-[#d0d5dd] px-2.5 text-[10px] disabled:opacity-40"
+        >
+          Next
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   EMPTY / ERROR / LOADING
+============================================================ */
+
+function EmptyProducts({
+  compatibility,
+  onClear,
+}: {
+  compatibility: boolean;
+  onClear: () => void;
+}) {
+  return (
+    <div className="mt-4 flex min-h-[300px] items-center justify-center rounded-[6px] border border-[#dfe3e8] bg-white">
+      <div className="text-center">
+        <PackageSearch className="mx-auto h-8 w-8 text-[#98a2b3]" />
+
+        <h3 className="mt-3 text-[15px] font-bold">
+          {compatibility
+            ? "No compatible products found"
+            : "No products found"}
+        </h3>
+
+        <button
+          type="button"
+          onClick={
+            onClear
+          }
+          className="mt-4 rounded-[4px] border border-[#d0d5dd] px-4 py-2 text-[11px]"
+        >
+          Clear filters
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+function ProductErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="mt-4 rounded-[6px] border border-[#f5c2c7] bg-white p-8 text-center">
+      <p className="text-[11px] text-[#b42318]">
+        {message}
+      </p>
+
+      <button
+        type="button"
+        onClick={
+          onRetry
+        }
+        className="mt-4 rounded bg-[#e31b2d] px-4 py-2 text-[11px] text-white"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+
+
+function ProductGridLoading() {
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {Array.from({
+        length:
+          PRODUCTS_PER_PAGE,
+      }).map(
+        (
+          _,
+          index,
+        ) => (
+          <div
+            key={
+              index
+            }
+            className="overflow-hidden rounded-[6px] border border-[#e4e7ec] bg-white"
+          >
+            <div className="h-[175px] animate-pulse bg-[#eef1f4]" />
+
+            <div className="space-y-3 p-4">
+              <div className="h-3 w-20 animate-pulse rounded bg-[#eef1f4]" />
+              <div className="h-4 w-full animate-pulse rounded bg-[#eef1f4]" />
+              <div className="h-4 w-3/4 animate-pulse rounded bg-[#eef1f4]" />
+              <div className="h-5 w-24 animate-pulse rounded bg-[#eef1f4]" />
+            </div>
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+
+/* ============================================================
+   NAVBAR
+============================================================ */
+
+function VehnexaNavbar({
+  cartCount,
+}: {
+  cartCount: number;
+}) {
+  return (
+    <header className="border-b border-[#163047] bg-[#071b2d]">
+      <div className="mx-auto flex h-[64px] max-w-[1320px] items-center px-4 sm:px-6 lg:px-8">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5"
+        >
+          <VehnexaMark />
+
+          <span className="text-[15px] font-bold text-white">
+            Vehnexa
+          </span>
+        </Link>
+
+        <nav className="ml-10 hidden h-full items-center gap-8 lg:flex">
+          <TopNavLink
+            href="/shop"
+            label="Shop"
+            active
+          />
+
+          <TopNavLink
+            href="/account/garage"
+            label="My Garage"
+          />
+
+          <TopNavLink
+            href="/ai-mechanic"
+            label="AI Mechanic"
+          />
+
+          <TopNavLink
+            href="#resources"
+            label="Resources"
+          />
+        </nav>
+
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              document
+                .getElementById(
+                  "shop-search",
+                )
+                ?.focus();
+            }}
+            className="flex h-9 w-9 items-center justify-center text-[#c4ced7]"
+            aria-label="Search products"
+          >
+            <Search className="h-[17px] w-[17px]" />
+          </button>
+
+          <div
+            className="relative flex h-9 w-9 items-center justify-center text-[#c4ced7]"
+            aria-label={`Cart with ${cartCount} items`}
+          >
+            <ShoppingCart className="h-[17px] w-[17px]" />
+
+            {cartCount >
+              0 && (
+              <span className="absolute right-0 top-0 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[8px] font-bold text-white">
+                {cartCount >
+                99
+                  ? "99+"
+                  : cartCount}
+              </span>
+            )}
+          </div>
+
+          <NavbarNotificationBell />
+
+
+          <Link
+            href="/account"
+            className="flex h-9 w-9 items-center justify-center text-[#c4ced7]"
+            aria-label="Account"
+          >
+            <UserRound className="h-[17px] w-[17px]" />
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+
+function TopNavLink({
+  href,
+  label,
+  active = false,
+}: {
+  href: string;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <Link
+      href={
+        href
+      }
+      className={`relative flex h-full items-center text-[11px] font-medium ${
+        active
+          ? "text-white"
+          : "text-[#b9c5d0]"
+      }`}
+    >
+      {label}
+
+      {active && (
+        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#e31b2d]" />
+      )}
+    </Link>
+  );
+}
+
+
+function VehnexaMark() {
+  return (
+    <div className="relative h-7 w-7">
+      <span className="absolute left-[1px] top-[3px] h-[22px] w-[10px] -skew-x-[25deg] rounded-[2px] bg-[#e31b2d]" />
+
+      <span className="absolute right-[2px] top-[3px] h-[22px] w-[10px] skew-x-[25deg] rounded-[2px] bg-[#d8dee5]" />
+    </div>
+  );
+}
+
+
+/* ============================================================
+   PAGE FALLBACK
+============================================================ */
+
+function ShopPageFallback() {
+  return (
+    <main className="min-h-screen bg-[#f5f7f9]">
+      <header className="h-[64px] bg-[#071b2d]" />
+
+      <div className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8">
+        <div className="h-8 w-52 animate-pulse rounded bg-[#e4e7ec]" />
+
+        <div className="mt-6 h-[82px] animate-pulse rounded-[6px] bg-[#e9edf2]" />
+
+        <ProductGridLoading />
+      </div>
+    </main>
+  );
+}
+
+
+/* ============================================================
+   PRODUCT IMAGE RESOLUTION
+============================================================ */
+
+function getProductImage(
+  product: Product,
+): string | null {
+  /*
+   * 1. Real product/SKU image from MongoDB always wins.
+   */
+
+  const realImage =
+    product.images[0]?.trim();
+
+  if (
+    realImage
+  ) {
+    return realImage;
+  }
+
+
+  /*
+   * 2. Build searchable component identity.
+   */
+
+  const searchableText =
+    [
+      product.name,
+      product.description,
+      product.sku,
+      product.part_number,
+      product.subcategory_slug,
+    ]
+      .filter(
+        Boolean,
+      )
+      .join(" ")
+      .toLowerCase();
+
+
+  /*
+   * 3. Exact component-type representative image.
+   *
+   * Rules are ordered from more specific to less specific.
+   */
+
+  const matchingRule =
+    PART_IMAGE_RULES.find(
+      (rule) =>
+        rule.keywords.some(
+          (keyword) =>
+            searchableText.includes(
+              keyword,
+            ),
+        ),
+    );
+
+
+  if (
+    matchingRule
+  ) {
+    return matchingRule.image;
+  }
+
+
+  /*
+   * 4. Unknown component.
+   *
+   * Do not invent or reuse a generic family photo.
+   */
+
+  return null;
+}
+
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function normalizePage(
+  value:
+    | string
+    | null,
+): number {
+  const parsed =
+    Number.parseInt(
+      value ?? "1",
+      10,
+    );
+
+  return Number.isFinite(
+    parsed,
+  ) &&
+    parsed >
+      0
+    ? parsed
+    : 1;
+}
+
+
+function getPaginationPages(
+  currentPage: number,
+  totalPages: number,
+): Array<
+  number |
+  "ellipsis"
+> {
+  if (
+    totalPages <=
+    7
+  ) {
+    return Array.from(
+      {
+        length:
+          totalPages,
+      },
+      (
+        _,
+        index,
+      ) =>
+        index +
+        1,
+    );
+  }
+
+  if (
+    currentPage <=
+    4
+  ) {
+    return [
+      1,
+      2,
+      3,
+      4,
+      5,
+      "ellipsis",
+      totalPages,
+    ];
+  }
+
+  if (
+    currentPage >=
+    totalPages -
+      3
+  ) {
+    return [
+      1,
+      "ellipsis",
+      totalPages - 4,
+      totalPages - 3,
+      totalPages - 2,
+      totalPages - 1,
+      totalPages,
+    ];
+  }
+
+  return [
+    1,
+    "ellipsis",
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    "ellipsis",
+    totalPages,
+  ];
+}
+
+
+function normalizeSort(
+  value:
+    | string
+    | null,
+): ProductSort {
+  switch (
+    value
+  ) {
+    case "price_asc":
+    case "price_desc":
+    case "rating":
+    case "newest":
+      return value;
+
+    default:
+      return "recommended";
+  }
+}
+
+
+function normalizePriceRange(
+  value:
+    | string
+    | null,
+): PriceRange {
+  switch (
+    value
+  ) {
+    case "under50":
+    case "50to100":
+    case "100to200":
+    case "200plus":
+      return value;
+
+    default:
+      return "any";
+  }
+}
+
+
+function getPriceRangeValues(
+  range: PriceRange,
+): {
+  min?: number;
+  max?: number;
+} {
+  switch (
+    range
+  ) {
+    case "under50":
+      return {
+        max: 50,
+      };
+
+    case "50to100":
+      return {
+        min: 50,
+        max: 100,
+      };
+
+    case "100to200":
+      return {
+        min: 100,
+        max: 200,
+      };
+
+    case "200plus":
+      return {
+        min: 200,
+      };
+
+    default:
+      return {};
+  }
+}

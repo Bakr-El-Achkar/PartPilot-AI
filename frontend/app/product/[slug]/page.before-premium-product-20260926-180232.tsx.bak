@@ -1,0 +1,2994 @@
+"use client";
+
+import PublicNavbarAuthActions from "@/components/customer/PublicNavbarAuthActions";
+
+import Link from "next/link";
+
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  useParams,
+  useRouter,
+} from "next/navigation";
+
+import {
+  Heart,
+  CarFront,
+  Check,
+  ChevronRight,
+  Loader2,
+  Minus,
+  PackageSearch,
+  Plus,
+  Search,
+  ShoppingCart,
+  Star,
+  UserRound,
+} from "lucide-react";
+
+import {
+  ApiError,
+} from "@/lib/api";
+
+import {
+  getAccessToken,
+} from "@/lib/auth";
+
+import {
+  getVehicles,
+  type Vehicle,
+} from "@/lib/vehicles";
+
+import {
+  getBrands,
+  getCategories,
+  getCompatibleProducts,
+  getProductBySlug,
+  type Brand,
+  type Category,
+  type Product,
+} from "@/lib/products";
+
+import {
+  addToCart,
+  CART_UPDATED_EVENT,
+  getCartCount,
+} from "@/lib/cart";
+
+import {
+  addWishlistProduct,
+  getWishlistProductIds,
+  removeWishlistProduct,
+} from "@/lib/wishlist";
+
+
+import {
+  createReview,
+  getProductReviews,
+  getReviewEligibility,
+  type Review,
+  type ReviewEligibility,
+} from "@/lib/reviews";
+
+
+type DetailTab =
+  | "overview"
+  | "specifications"
+  | "fitment"
+  | "reviews";
+
+
+export default function ProductDetailPage() {
+  const params =
+    useParams<{
+      slug: string;
+    }>();
+
+  const router =
+    useRouter();
+
+  const slug =
+    params.slug;
+
+
+  const [
+    product,
+    setProduct,
+  ] = useState<
+    Product | null
+  >(null);
+
+  const [
+    categories,
+    setCategories,
+  ] = useState<
+    Category[]
+  >([]);
+
+  const [
+    brands,
+    setBrands,
+  ] = useState<
+    Brand[]
+  >([]);
+
+  const [
+    activeVehicle,
+    setActiveVehicle,
+  ] = useState<
+    Vehicle | null
+  >(null);
+
+  const [
+    compatible,
+    setCompatible,
+  ] = useState<
+    boolean | null
+  >(null);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(
+    true,
+  );
+
+  const [
+    error,
+    setError,
+  ] = useState(
+    "",
+  );
+
+  const [
+    compatibilityLoading,
+    setCompatibilityLoading,
+  ] = useState(
+    false,
+  );
+
+  const [
+    compatibilityError,
+    setCompatibilityError,
+  ] = useState(
+    "",
+  );
+
+  const [
+    quantity,
+    setQuantity,
+  ] = useState(
+    1,
+  );
+
+  const [
+    activeTab,
+    setActiveTab,
+  ] = useState<DetailTab>(
+    "overview",
+  );
+
+  const [
+    cartCount,
+    setCartCount,
+  ] = useState(
+    0,
+  );
+
+  const [
+    added,
+    setAdded,
+  ] = useState(
+    false,
+  );
+
+  const [
+    search,
+    setSearch,
+  ] = useState(
+    "",
+  );
+
+
+  const [
+    isWishlisted,
+    setIsWishlisted,
+  ] = useState(
+    false,
+  );
+
+
+  const [
+    wishlistBusy,
+    setWishlistBusy,
+  ] = useState(
+    false,
+  );
+
+
+  const [
+    wishlistError,
+    setWishlistError,
+  ] = useState(
+    "",
+  );
+
+
+  /* ==========================================================
+     REVIEW DEEP LINK
+  ========================================================== */
+
+  useEffect(() => {
+    if (
+      window.location.hash !==
+      "#reviews"
+    ) {
+      return;
+    }
+
+
+    const timer =
+      window.setTimeout(
+        () => {
+          setActiveTab(
+            "reviews",
+          );
+
+
+          document
+            .getElementById(
+              "reviews",
+            )
+            ?.scrollIntoView({
+              behavior:
+                "smooth",
+
+              block:
+                "start",
+            });
+        },
+        50,
+      );
+
+
+    return () => {
+      window.clearTimeout(
+        timer,
+      );
+    };
+  }, []);
+
+
+  /* ==========================================================
+     WISHLIST STATUS
+  ========================================================== */
+
+  useEffect(() => {
+    if (!product) {
+      return;
+    }
+
+
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      return;
+    }
+
+
+    const accessToken =
+      token;
+
+    const productId =
+      product.id;
+
+
+    let cancelled =
+      false;
+
+
+    async function loadWishlistStatus() {
+      try {
+        const productIds =
+          await getWishlistProductIds(
+            accessToken,
+          );
+
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+
+        setIsWishlisted(
+          productIds.includes(
+            productId,
+          ),
+        );
+
+      } catch {
+        /*
+         * Product Details stays usable even if
+         * Wishlist status cannot be loaded.
+         */
+      }
+    }
+
+
+    void loadWishlistStatus();
+
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    product,
+  ]);
+
+
+  /* ==========================================================
+     CART COUNT
+  ========================================================== */
+
+  useEffect(() => {
+    function syncCart() {
+      setCartCount(
+        getCartCount(),
+      );
+    }
+
+    syncCart();
+
+    window.addEventListener(
+      CART_UPDATED_EVENT,
+      syncCart,
+    );
+
+    window.addEventListener(
+      "storage",
+      syncCart,
+    );
+
+    return () => {
+      window.removeEventListener(
+        CART_UPDATED_EVENT,
+        syncCart,
+      );
+
+      window.removeEventListener(
+        "storage",
+        syncCart,
+      );
+    };
+  }, []);
+
+
+  /* ==========================================================
+     PRODUCT + CATALOG
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function load() {
+      try {
+        setLoading(
+          true,
+        );
+
+        setError(
+          "",
+        );
+
+        const productResult =
+          await getProductBySlug(
+            slug,
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        setProduct(
+          productResult,
+        );
+
+        const [
+          categoryResult,
+          brandResult,
+        ] =
+          await Promise.allSettled([
+            getCategories(),
+            getBrands(),
+          ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          categoryResult.status ===
+          "fulfilled"
+        ) {
+          setCategories(
+            categoryResult.value,
+          );
+        }
+
+        if (
+          brandResult.status ===
+          "fulfilled"
+        ) {
+          setBrands(
+            brandResult.value,
+          );
+        }
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        setProduct(
+          null,
+        );
+
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Unable to load this product.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    slug,
+  ]);
+
+
+  /* ==========================================================
+     GARAGE + COMPATIBILITY
+  ========================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function loadCompatibility() {
+      if (
+        !product
+      ) {
+        return;
+      }
+
+      const token =
+        getAccessToken();
+
+      if (!token) {
+        if (
+          !cancelled
+        ) {
+          setActiveVehicle(
+            null,
+          );
+
+          setCompatible(
+            null,
+          );
+
+          setCompatibilityError(
+            "",
+          );
+        }
+
+        return;
+      }
+
+      try {
+        setCompatibilityLoading(
+          true,
+        );
+
+        setCompatibilityError(
+          "",
+        );
+
+        const vehicles =
+          await getVehicles(
+            token,
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        const active =
+          vehicles.find(
+            (vehicle) =>
+              vehicle.is_active,
+          ) ?? null;
+
+        setActiveVehicle(
+          active,
+        );
+
+        if (!active) {
+          setCompatible(
+            null,
+          );
+
+          return;
+        }
+
+        const compatibleProducts =
+          await getCompatibleProducts(
+            token,
+            active.id,
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        setCompatible(
+          compatibleProducts.some(
+            (item) =>
+              item.id ===
+              product.id,
+          ),
+        );
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        setCompatible(
+          null,
+        );
+
+        setCompatibilityError(
+          err instanceof ApiError
+            ? err.message
+            : "Unable to check vehicle compatibility.",
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setCompatibilityLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void loadCompatibility();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    product,
+  ]);
+
+
+  /* ==========================================================
+     LOOKUPS
+  ========================================================== */
+
+  const brand =
+    useMemo(
+      () =>
+        brands.find(
+          (item) =>
+            item.id ===
+            product?.brand_id,
+        ) ?? null,
+      [
+        brands,
+        product,
+      ],
+    );
+
+  const category =
+    useMemo(
+      () =>
+        categories.find(
+          (item) =>
+            item.id ===
+            product?.category_id,
+        ) ?? null,
+      [
+        categories,
+        product,
+      ],
+    );
+
+  const subcategory =
+    useMemo(() => {
+      if (
+        !category ||
+        !product
+      ) {
+        return null;
+      }
+
+      return (
+        category.subcategories.find(
+          (item) =>
+            item.slug ===
+            product.subcategory_slug,
+        ) ?? null
+      );
+    }, [
+      category,
+      product,
+    ]);
+
+
+  /* ==========================================================
+     SEARCH
+  ========================================================== */
+
+  function handleSearch(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    const value =
+      search.trim();
+
+    if (!value) {
+      router.push(
+        "/shop",
+      );
+
+      return;
+    }
+
+    router.push(
+      `/shop?search=${encodeURIComponent(
+        value,
+      )}`,
+    );
+  }
+
+
+  /* ==========================================================
+     WISHLIST ACTION
+  ========================================================== */
+
+  async function toggleWishlist() {
+    if (
+      !product ||
+      wishlistBusy
+    ) {
+      return;
+    }
+
+
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.push(
+        "/login",
+      );
+
+      return;
+    }
+
+
+    try {
+      setWishlistBusy(
+        true,
+      );
+
+      setWishlistError(
+        "",
+      );
+
+
+      if (
+        isWishlisted
+      ) {
+        await removeWishlistProduct(
+          token,
+          product.id,
+        );
+
+
+        setIsWishlisted(
+          false,
+        );
+
+      } else {
+        await addWishlistProduct(
+          token,
+          product.id,
+        );
+
+
+        setIsWishlisted(
+          true,
+        );
+      }
+
+    } catch (
+      wishlistActionError
+    ) {
+      setWishlistError(
+        wishlistActionError instanceof
+          Error
+          ? wishlistActionError.message
+          : "Unable to update wishlist.",
+      );
+
+    } finally {
+      setWishlistBusy(
+        false,
+      );
+    }
+  }
+
+
+  /* ==========================================================
+     ADD TO CART
+  ========================================================== */
+
+  function handleAddToCart() {
+    if (
+      !product ||
+      product.stock_quantity <=
+        0
+    ) {
+      return;
+    }
+
+
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      router.push(
+        "/login",
+      );
+
+      return;
+    }
+
+    const safeQuantity =
+      Math.min(
+        quantity,
+        product.stock_quantity,
+      );
+
+    for (
+      let index = 0;
+      index <
+      safeQuantity;
+      index += 1
+    ) {
+      addToCart(
+        product,
+      );
+    }
+
+    setCartCount(
+      getCartCount(),
+    );
+
+    setAdded(
+      true,
+    );
+
+    window.setTimeout(
+      () => {
+        setAdded(
+          false,
+        );
+      },
+      1200,
+    );
+  }
+
+
+  /* ==========================================================
+     LOADING
+  ========================================================== */
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-[#f6f7f9]">
+        <Navbar
+          cartCount={
+            cartCount
+          }
+          search={
+            search
+          }
+          setSearch={
+            setSearch
+          }
+          onSearch={
+            handleSearch
+          }
+        />
+
+        <div className="flex min-h-[500px] items-center justify-center">
+          <div className="flex items-center gap-3 text-sm font-medium text-[#667085]">
+            <Loader2 className="h-5 w-5 animate-spin" />
+
+            Loading product...
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+
+  /* ==========================================================
+     ERROR
+  ========================================================== */
+
+  if (
+    error ||
+    !product
+  ) {
+    return (
+      <main className="min-h-screen bg-[#f6f7f9]">
+        <Navbar
+          cartCount={
+            cartCount
+          }
+          search={
+            search
+          }
+          setSearch={
+            setSearch
+          }
+          onSearch={
+            handleSearch
+          }
+        />
+
+        <div className="mx-auto max-w-[1180px] px-5 py-20">
+          <div className="rounded-[6px] border border-[#e4e7ec] bg-white px-8 py-14 text-center">
+            <PackageSearch className="mx-auto h-10 w-10 text-[#98a2b3]" />
+
+            <h1 className="mt-4 text-xl font-bold text-[#101828]">
+              Product unavailable
+            </h1>
+
+            <p className="mt-2 text-sm text-[#667085]">
+              {error ||
+                "This product could not be found."}
+            </p>
+
+            <Link
+              href="/shop"
+              className="mt-6 inline-flex h-10 items-center justify-center rounded-[4px] bg-[#e31b2d] px-5 text-xs font-bold text-white transition hover:bg-[#c81424]"
+            >
+              Back to Shop
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+
+  const effectivePrice =
+    product.sale_price ??
+    product.price;
+
+  const hasSale =
+    product.sale_price !==
+      null &&
+    product.sale_price <
+      product.price;
+
+  const outOfStock =
+    product.stock_quantity <=
+    0;
+
+  const image =
+    product.images[0]?.trim() ||
+    getReferenceImage(
+      product,
+    );
+
+  const referenceImage =
+    !product.images[0]?.trim() &&
+    Boolean(
+      image,
+    );
+
+
+  return (
+    <main className="min-h-screen bg-[#f6f7f9]">
+      <Navbar
+        cartCount={
+          cartCount
+        }
+        search={
+          search
+        }
+        setSearch={
+          setSearch
+        }
+        onSearch={
+          handleSearch
+        }
+      />
+
+      <section className="mx-auto max-w-[1180px] px-5 py-7 sm:px-7 lg:px-8">
+        {/* ====================================================
+            BREADCRUMB
+        ==================================================== */}
+
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#667085]">
+          <Link
+            href="/shop"
+            className="font-medium transition hover:text-[#e31b2d]"
+          >
+            Shop
+          </Link>
+
+          <ChevronRight className="h-3 w-3" />
+
+          <span>
+            {category?.name ??
+              "Parts"}
+          </span>
+
+          <ChevronRight className="h-3 w-3" />
+
+          <span className="font-medium text-[#344054]">
+            {subcategory?.name ??
+              formatSlug(
+                product.subcategory_slug,
+              )}
+          </span>
+        </div>
+
+
+        {/* ====================================================
+            MAIN PRODUCT AREA
+        ==================================================== */}
+
+        <div className="mt-5 grid gap-7 lg:grid-cols-[1.03fr_0.97fr]">
+          {/* IMAGE */}
+
+          <section className="overflow-hidden rounded-[6px] border border-[#dfe3e8] bg-white">
+            <div className="relative flex min-h-[390px] items-center justify-center bg-[#f8f9fb] p-8 lg:min-h-[470px]">
+              {image ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={
+                      image
+                    }
+                    alt={
+                      product.name
+                    }
+                    className="max-h-[380px] max-w-full object-contain"
+                  />
+
+                  {referenceImage && (
+                    <span className="absolute bottom-4 left-4 rounded-[3px] border border-[#e4e7ec] bg-white px-2.5 py-1.5 text-[9px] font-medium text-[#667085]">
+                      Reference image
+                    </span>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center">
+                  <PackageSearch className="h-12 w-12 text-[#c7cdd6]" />
+
+                  <p className="mt-3 text-xs text-[#98a2b3]">
+                    Image unavailable
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+
+
+          {/* PRODUCT INFO */}
+
+          <section className="rounded-[6px] border border-[#dfe3e8] bg-white p-6 sm:p-7">
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#8b96a7]">
+              {brand?.name ??
+                "VEHNEXA"}
+            </p>
+
+            <h1 className="mt-2 text-[27px] font-bold leading-[1.15] tracking-[-0.035em] text-[#101828] sm:text-[32px]">
+              {product.name}
+            </h1>
+
+
+            {/* RATING */}
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
+              <div className="flex items-center gap-1">
+                <Star className="h-4 w-4 fill-[#f4b740] text-[#f4b740]" />
+
+                <span className="font-bold text-[#344054]">
+                  {product.rating_average.toFixed(
+                    1,
+                  )}
+                </span>
+              </div>
+
+              <span className="text-[#98a2b3]">
+                •
+              </span>
+
+              <span className="text-[#667085]">
+                {product.review_count}{" "}
+                reviews
+              </span>
+
+              <span className="text-[#98a2b3]">
+                •
+              </span>
+
+              <span className="font-medium text-[#667085]">
+                SKU{" "}
+                {product.sku}
+              </span>
+            </div>
+
+
+            {/* COMPATIBILITY */}
+
+            <div className="mt-5">
+              <CompatibilityBadge
+                vehicle={
+                  activeVehicle
+                }
+                compatible={
+                  compatible
+                }
+                loading={
+                  compatibilityLoading
+                }
+                error={
+                  compatibilityError
+                }
+              />
+            </div>
+
+
+            {/* PRICE */}
+
+            <div className="mt-6 flex items-end gap-3">
+              <span className="text-[30px] font-bold tracking-[-0.03em] text-[#101828]">
+                $
+                {effectivePrice.toFixed(
+                  2,
+                )}
+              </span>
+
+              {hasSale && (
+                <span className="pb-1 text-sm text-[#98a2b3] line-through">
+                  $
+                  {product.price.toFixed(
+                    2,
+                  )}
+                </span>
+              )}
+            </div>
+
+
+            {/* STOCK */}
+
+            <div className="mt-2">
+              {outOfStock ? (
+                <p className="text-[12px] font-semibold text-[#b42318]">
+                  Out of stock
+                </p>
+              ) : (
+                <p className="text-[12px] font-semibold text-[#16804a]">
+                  In stock -{" "}
+                  {
+                    product.stock_quantity
+                  }{" "}
+                  available
+                </p>
+              )}
+            </div>
+
+
+            {/* QUANTITY + CART */}
+
+            <div className="mt-7 border-t border-[#eaecf0] pt-6">
+              <p className="mb-2 text-[11px] font-semibold text-[#475467]">
+                Quantity
+              </p>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="flex h-11 w-[130px] items-center rounded-[4px] border border-[#d0d5dd] bg-white">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuantity(
+                        (current) =>
+                          Math.max(
+                            1,
+                            current -
+                              1,
+                          ),
+                      );
+                    }}
+                    disabled={
+                      quantity <=
+                      1
+                    }
+                    className="flex h-full w-10 items-center justify-center text-[#667085] disabled:opacity-30"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+
+                  <span className="flex-1 text-center text-sm font-bold text-[#101828]">
+                    {quantity}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuantity(
+                        (current) =>
+                          Math.min(
+                            product.stock_quantity,
+                            current +
+                              1,
+                          ),
+                      );
+                    }}
+                    disabled={
+                      outOfStock ||
+                      quantity >=
+                        product.stock_quantity
+                    }
+                    className="flex h-full w-10 items-center justify-center text-[#667085] disabled:opacity-30"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={
+                    outOfStock
+                  }
+                  onClick={
+                    handleAddToCart
+                  }
+                  className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-5 text-[12px] font-bold text-white transition ${
+                    outOfStock
+                      ? "cursor-not-allowed bg-[#cfd4dc]"
+                      : added
+                        ? "bg-[#16804a]"
+                        : "bg-[#e31b2d] hover:bg-[#c81424]"
+                  }`}
+                >
+                  {added ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Added to cart
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-4 w-4" />
+                      Add to cart
+                    </>
+                  )}
+                </button>
+              </div>
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  void toggleWishlist()
+                }
+                disabled={
+                  wishlistBusy
+                }
+                aria-pressed={
+                  isWishlisted
+                }
+                className={
+                  isWishlisted
+                    ? "mt-3 flex h-[44px] w-full items-center justify-center gap-2 rounded-[7px] border border-[#ef3d43] bg-[#fff3f4] text-[10px] font-semibold text-[#e31b2d] transition disabled:cursor-not-allowed disabled:opacity-60"
+                    : "mt-3 flex h-[44px] w-full items-center justify-center gap-2 rounded-[7px] border border-[#d0d5dd] bg-white text-[10px] font-semibold text-[#344054] transition hover:border-[#ef3d43] hover:text-[#e31b2d] disabled:cursor-not-allowed disabled:opacity-60"
+                }
+              >
+                <Heart
+                  className={
+                    isWishlisted
+                      ? "h-4 w-4 fill-current"
+                      : "h-4 w-4"
+                  }
+                />
+
+                {wishlistBusy
+                  ? "Updating..."
+                  : isWishlisted
+                    ? "Saved to wishlist"
+                    : "Save to wishlist"}
+              </button>
+
+
+              {wishlistError && (
+                <p className="mt-2 text-[9px] leading-4 text-[#b42318]">
+                  {
+                    wishlistError
+                  }
+                </p>
+              )}
+            </div>
+
+
+            {/* QUICK INFO */}
+
+            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-[#eaecf0] pt-5">
+              <QuickInfo
+                label="Warranty"
+                value={
+                  product.warranty ||
+                  "Not specified"
+                }
+              />
+
+              <QuickInfo
+                label="Part number"
+                value={
+                  product.part_number
+                }
+              />
+            </div>
+          </section>
+        </div>
+
+
+        {/* ====================================================
+            DETAIL TABS
+        ==================================================== */}
+
+        <section
+          id="reviews"
+          className="mt-7 scroll-mt-20 overflow-hidden rounded-[6px] border border-[#dfe3e8] bg-white"
+        >
+          <div className="flex overflow-x-auto border-b border-[#eaecf0] px-5">
+            <TabButton
+              active={
+                activeTab ===
+                "overview"
+              }
+              onClick={() =>
+                setActiveTab(
+                  "overview",
+                )
+              }
+            >
+              Overview
+            </TabButton>
+
+            <TabButton
+              active={
+                activeTab ===
+                "specifications"
+              }
+              onClick={() =>
+                setActiveTab(
+                  "specifications",
+                )
+              }
+            >
+              Specifications
+            </TabButton>
+
+            <TabButton
+              active={
+                activeTab ===
+                "fitment"
+              }
+              onClick={() =>
+                setActiveTab(
+                  "fitment",
+                )
+              }
+            >
+              Fitment
+            </TabButton>
+
+            <TabButton
+              active={
+                activeTab ===
+                "reviews"
+              }
+              onClick={() =>
+                setActiveTab(
+                  "reviews",
+                )
+              }
+            >
+              Reviews
+              {product.review_count >
+                0 && (
+                <>
+                  {" "}
+                  (
+                  {
+                    product.review_count
+                  }
+                  )
+                </>
+              )}
+            </TabButton>
+          </div>
+
+          <div className="p-6 sm:p-7">
+            {activeTab ===
+              "overview" && (
+              <OverviewTab
+                product={
+                  product
+                }
+              />
+            )}
+
+            {activeTab ===
+              "specifications" && (
+              <SpecificationsTab
+                product={
+                  product
+                }
+              />
+            )}
+
+            {activeTab ===
+              "fitment" && (
+              <FitmentTab
+                vehicle={
+                  activeVehicle
+                }
+                compatible={
+                  compatible
+                }
+                loading={
+                  compatibilityLoading
+                }
+                error={
+                  compatibilityError
+                }
+              />
+            )}
+
+            {activeTab ===
+              "reviews" && (
+              <ReviewsTab
+                product={
+                  product
+                }
+                onProductUpdated={(
+                  updatedProduct,
+                ) =>
+                  setProduct(
+                    updatedProduct,
+                  )
+                }
+              />
+            )}
+          </div>
+        </section>
+      </section>
+    </main>
+  );
+}
+
+
+/* ============================================================
+   NAVBAR
+============================================================ */
+
+function Navbar({
+  cartCount,
+  search,
+  setSearch,
+  onSearch,
+}: {
+  cartCount: number;
+  search: string;
+  setSearch: (
+    value: string,
+  ) => void;
+  onSearch: (
+    event: FormEvent<HTMLFormElement>,
+  ) => void;
+}) {
+  return (
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#071b2d]">
+      <div className="mx-auto flex h-[62px] max-w-[1180px] items-center gap-6 px-5 sm:px-7 lg:px-8">
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-[4px] bg-[#e31b2d] text-sm font-black text-white">
+            V
+          </span>
+
+          <span className="text-[15px] font-extrabold tracking-[0.07em] text-white">
+            VEHNEXA
+          </span>
+        </Link>
+
+
+        <nav className="hidden h-full items-center gap-6 lg:flex">
+          <Link
+            href="/shop"
+            className="flex h-full items-center border-b-2 border-[#e31b2d] text-[11px] font-semibold text-white"
+          >
+            Shop
+          </Link>
+
+          <Link
+            href="/account/garage"
+            className="text-[11px] font-medium text-[#c2ccd6] transition hover:text-white"
+          >
+            My Garage
+          </Link>
+
+          <Link
+            href="/ai-mechanic"
+            className="text-[11px] font-medium text-[#c2ccd6] transition hover:text-white"
+          >
+            AI Mechanic
+          </Link>
+
+          <Link
+            href="/resources"
+            className="text-[11px] font-medium text-[#c2ccd6] transition hover:text-white"
+          >
+            Resources
+          </Link>
+        </nav>
+
+
+        <form
+          onSubmit={
+            onSearch
+          }
+          className="ml-auto hidden h-9 w-full max-w-[260px] items-center rounded-[4px] border border-white/15 bg-white/10 px-3 md:flex"
+        >
+          <Search className="h-3.5 w-3.5 shrink-0 text-[#aebbc7]" />
+
+          <input
+            value={
+              search
+            }
+            onChange={(
+              event,
+            ) =>
+              setSearch(
+                event.target.value,
+              )
+            }
+            placeholder="Search parts..."
+            className="h-full min-w-0 flex-1 bg-transparent px-2 text-[11px] text-white outline-none placeholder:text-[#8fa0af]"
+          />
+        </form>
+
+
+        <div className="flex items-center gap-2">
+          <div className="relative flex h-9 w-9 items-center justify-center rounded-[4px] text-[#d7e0e8]">
+            <ShoppingCart className="h-[17px] w-[17px]" />
+
+            {cartCount >
+              0 && (
+              <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[8px] font-bold text-white">
+                {cartCount}
+              </span>
+            )}
+          </div>
+
+          <PublicNavbarAuthActions />
+        </div>
+      </div>
+    </header>
+  );
+}
+
+
+/* ============================================================
+   COMPATIBILITY BADGE
+============================================================ */
+
+function CompatibilityBadge({
+  vehicle,
+  compatible,
+  loading,
+  error,
+}: {
+  vehicle:
+    | Vehicle
+    | null;
+  compatible:
+    | boolean
+    | null;
+  loading: boolean;
+  error: string;
+}) {
+  if (loading) {
+    return (
+      <div className="inline-flex items-center gap-2 rounded-[4px] border border-[#d9e1e8] bg-[#f8fafc] px-3 py-2 text-[10px] font-bold text-[#667085]">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+
+        Checking vehicle fitment...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-[4px] border border-[#f1d3d6] bg-[#fff5f6] px-3 py-2 text-[10px] font-semibold text-[#b42318]">
+        Compatibility unavailable
+      </div>
+    );
+  }
+
+  if (!vehicle) {
+    return (
+      <Link
+        href="/account/garage"
+        className="inline-flex items-center gap-2 rounded-[4px] border border-[#d6e2ed] bg-[#f6f9fc] px-3 py-2 text-[10px] font-bold text-[#416b91]"
+      >
+        <CarFront className="h-3.5 w-3.5" />
+
+        Select a vehicle to check fitment
+      </Link>
+    );
+  }
+
+  if (compatible) {
+    return (
+      <div className="inline-flex items-center gap-2 rounded-[4px] border border-[#b7e4c8] bg-[#ecfdf3] px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.04em] text-[#16804a]">
+        <Check className="h-3.5 w-3.5" />
+
+        Fits your{" "}
+        {vehicle.year}{" "}
+        {vehicle.make}{" "}
+        {vehicle.model}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-[4px] border border-[#ead9aa] bg-[#fffbeb] px-3 py-2 text-[10px] font-bold text-[#8a6415]">
+      Not marked compatible with your{" "}
+      {vehicle.year}{" "}
+      {vehicle.make}{" "}
+      {vehicle.model}{" "}
+      in Vehnexa demo fitment data
+    </div>
+  );
+}
+
+
+/* ============================================================
+   TABS
+============================================================ */
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children:
+    React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={
+        onClick
+      }
+      className={`relative h-12 shrink-0 px-4 text-[11px] font-semibold transition ${
+        active
+          ? "text-[#101828]"
+          : "text-[#667085] hover:text-[#344054]"
+      }`}
+    >
+      {children}
+
+      {active && (
+        <span className="absolute inset-x-4 bottom-0 h-[2px] bg-[#e31b2d]" />
+      )}
+    </button>
+  );
+}
+
+
+/* ============================================================
+   OVERVIEW
+============================================================ */
+
+function OverviewTab({
+  product,
+}: {
+  product: Product;
+}) {
+  return (
+    <div className="max-w-[780px]">
+      <h2 className="text-[15px] font-bold text-[#101828]">
+        Product overview
+      </h2>
+
+      <p className="mt-3 text-[12px] leading-6 text-[#667085]">
+        {product.description ||
+          "No product description is available."}
+      </p>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <QuickInfo
+          label="Warranty"
+          value={
+            product.warranty ||
+            "Not specified"
+          }
+        />
+
+        <QuickInfo
+          label="Part number"
+          value={
+            product.part_number
+          }
+        />
+
+        <QuickInfo
+          label="SKU"
+          value={
+            product.sku
+          }
+        />
+
+        <QuickInfo
+          label="Availability"
+          value={
+            product.stock_quantity >
+            0
+              ? `${product.stock_quantity} in stock`
+              : "Out of stock"
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   SPECIFICATIONS
+============================================================ */
+
+function SpecificationsTab({
+  product,
+}: {
+  product: Product;
+}) {
+  const entries =
+    Object.entries(
+      product.specifications ??
+        {},
+    );
+
+  return (
+    <div className="max-w-[780px]">
+      <h2 className="text-[15px] font-bold text-[#101828]">
+        Specifications
+      </h2>
+
+      {entries.length ===
+      0 ? (
+        <p className="mt-3 text-[12px] text-[#667085]">
+          No additional specifications are available for this product.
+        </p>
+      ) : (
+        <div className="mt-4 overflow-hidden rounded-[5px] border border-[#e4e7ec]">
+          {entries.map(
+            ([
+              key,
+              value,
+            ]) => (
+              <div
+                key={
+                  key
+                }
+                className="grid grid-cols-[minmax(130px,0.4fr)_1fr] border-b border-[#eaecf0] last:border-b-0"
+              >
+                <div className="bg-[#f8f9fb] px-4 py-3 text-[11px] font-semibold text-[#475467]">
+                  {formatSlug(
+                    key,
+                  )}
+                </div>
+
+                <div className="px-4 py-3 text-[11px] text-[#344054]">
+                  {formatSpecificationValue(
+                    value,
+                  )}
+                </div>
+              </div>
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/* ============================================================
+   FITMENT
+============================================================ */
+
+function FitmentTab({
+  vehicle,
+  compatible,
+  loading,
+  error,
+}: {
+  vehicle:
+    | Vehicle
+    | null;
+  compatible:
+    | boolean
+    | null;
+  loading: boolean;
+  error: string;
+}) {
+  return (
+    <div className="max-w-[800px]">
+      <h2 className="text-[15px] font-bold text-[#101828]">
+        Vehicle Fitment
+      </h2>
+
+      <p className="mt-2 text-[12px] leading-5 text-[#667085]">
+        Vehnexa checks this product against the active vehicle saved in My Garage.
+      </p>
+
+      <div className="mt-5">
+        <CompatibilityBadge
+          vehicle={
+            vehicle
+          }
+          compatible={
+            compatible
+          }
+          loading={
+            loading
+          }
+          error={
+            error
+          }
+        />
+      </div>
+
+      {vehicle && (
+        <div className="mt-5 rounded-[5px] border border-[#dce5ed] bg-[#f7fafc] p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-[#d7e3ee] bg-white">
+              <CarFront className="h-5 w-5 text-[#416b91]" />
+            </div>
+
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#64809d]">
+                ACTIVE VEHICLE
+              </p>
+
+              <p className="mt-1 text-[13px] font-bold text-[#183b5d]">
+                {vehicle.year}{" "}
+                {vehicle.make}{" "}
+                {vehicle.model}
+              </p>
+
+              <p className="mt-1 text-[10px] text-[#667f96]">
+                {vehicle.engine}{" "}
+                •{" "}
+                {
+                  vehicle.transmission
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <p className="mt-5 text-[10px] leading-5 text-[#98a2b3]">
+        Vehicle compatibility shown in this development catalog is based on Vehnexa demo fitment data and is not OEM-certified. Always verify fitment before installation.
+      </p>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   REVIEWS
+============================================================ */
+
+function ReviewsTab({
+  product,
+  onProductUpdated,
+}: {
+  product:
+    Product;
+
+  onProductUpdated:
+    (
+      product:
+        Product,
+    ) =>
+      void;
+}) {
+  const [
+    reviews,
+    setReviews,
+  ] = useState<
+    Review[]
+  >([]);
+
+
+  const [
+    reviewsLoading,
+    setReviewsLoading,
+  ] = useState(
+    true,
+  );
+
+
+  const [
+    reviewsError,
+    setReviewsError,
+  ] = useState(
+    "",
+  );
+
+
+  const [
+    eligibility,
+    setEligibility,
+  ] = useState<
+    ReviewEligibility | null
+  >(
+    null,
+  );
+
+
+  const [
+    eligibilityLoading,
+    setEligibilityLoading,
+  ] = useState(
+    false,
+  );
+
+
+  const [
+    eligibilityError,
+    setEligibilityError,
+  ] = useState(
+    "",
+  );
+
+
+  const [
+    signedIn,
+    setSignedIn,
+  ] = useState(
+    false,
+  );
+
+
+  const [
+    rating,
+    setRating,
+  ] = useState(
+    0,
+  );
+
+
+  const [
+    comment,
+    setComment,
+  ] = useState(
+    "",
+  );
+
+
+  const [
+    submitting,
+    setSubmitting,
+  ] = useState(
+    false,
+  );
+
+
+  const [
+    submitError,
+    setSubmitError,
+  ] = useState(
+    "",
+  );
+
+
+  const [
+    success,
+    setSuccess,
+  ] = useState(
+    "",
+  );
+
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+
+    const token =
+      getAccessToken();
+
+
+    /*
+     * Authentication comes from localStorage, which is an
+     * external browser system. Defer the React state sync so
+     * we do not synchronously set state in the effect body.
+     */
+    const authTimer =
+      window.setTimeout(
+        () => {
+          if (
+            cancelled
+          ) {
+            return;
+          }
+
+
+          setSignedIn(
+            Boolean(
+              token,
+            ),
+          );
+
+
+          if (!token) {
+            setEligibility(
+              null,
+            );
+
+            setEligibilityError(
+              "",
+            );
+
+            setEligibilityLoading(
+              false,
+            );
+          }
+        },
+        0,
+      );
+
+
+    async function loadReviews() {
+      try {
+        setReviewsLoading(
+          true,
+        );
+
+        setReviewsError(
+          "",
+        );
+
+
+        const result =
+          await getProductReviews(
+            product.id,
+          );
+
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+
+        setReviews(
+          result,
+        );
+
+      } catch (
+        loadError
+      ) {
+        if (
+          !cancelled
+        ) {
+          setReviewsError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load reviews.",
+          );
+        }
+
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setReviewsLoading(
+            false,
+          );
+        }
+      }
+    }
+
+
+    void loadReviews();
+
+
+    if (token) {
+      const accessToken =
+        token;
+
+
+      async function loadEligibility() {
+        try {
+          setEligibilityLoading(
+            true,
+          );
+
+          setEligibilityError(
+            "",
+          );
+
+
+          const result =
+            await getReviewEligibility(
+              accessToken,
+              product.id,
+            );
+
+
+          if (
+            cancelled
+          ) {
+            return;
+          }
+
+
+          setEligibility(
+            result,
+          );
+
+        } catch (
+          loadError
+        ) {
+          if (
+            !cancelled
+          ) {
+            setEligibility(
+              null,
+            );
+
+
+            setEligibilityError(
+              loadError instanceof
+                Error
+                ? loadError.message
+                : "Unable to check review eligibility.",
+            );
+          }
+
+        } finally {
+          if (
+            !cancelled
+          ) {
+            setEligibilityLoading(
+              false,
+            );
+          }
+        }
+      }
+
+
+      void loadEligibility();
+    }
+
+
+    return () => {
+      cancelled =
+        true;
+
+
+      window.clearTimeout(
+        authTimer,
+      );
+    };
+  }, [
+    product.id,
+  ]);
+
+
+  async function submitReview(
+    event:
+      FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+
+    const token =
+      getAccessToken();
+
+
+    if (!token) {
+      setSubmitError(
+        "Please sign in before submitting a review.",
+      );
+
+      return;
+    }
+
+
+    if (
+      rating <
+        1 ||
+      rating >
+        5
+    ) {
+      setSubmitError(
+        "Please select a rating from 1 to 5 stars.",
+      );
+
+      return;
+    }
+
+
+    const normalizedComment =
+      comment.trim();
+
+
+    if (
+      normalizedComment.length <
+      2
+    ) {
+      setSubmitError(
+        "Please write a short review before submitting.",
+      );
+
+      return;
+    }
+
+
+    try {
+      setSubmitting(
+        true,
+      );
+
+      setSubmitError(
+        "",
+      );
+
+      setSuccess(
+        "",
+      );
+
+
+      const created =
+        await createReview(
+          token,
+          {
+            product_id:
+              product.id,
+
+            rating:
+              rating,
+
+            comment:
+              normalizedComment,
+          },
+        );
+
+
+      setReviews(
+        (
+          current,
+        ) => [
+          created,
+          ...current,
+        ],
+      );
+
+
+      setEligibility({
+        eligible:
+          false,
+
+        reason:
+          "You already reviewed this product.",
+
+        review_id:
+          created.id,
+      });
+
+
+      setRating(
+        0,
+      );
+
+      setComment(
+        "",
+      );
+
+
+      setSuccess(
+        "Thank you. Your review has been published.",
+      );
+
+
+      try {
+        const refreshedProduct =
+          await getProductBySlug(
+            product.slug,
+          );
+
+
+        onProductUpdated(
+          refreshedProduct,
+        );
+
+      } catch {
+        /*
+         * The submitted review is already saved.
+         * A failed rating refresh must not make the
+         * customer think submission failed.
+         */
+      }
+
+    } catch (
+      submitReviewError
+    ) {
+      setSubmitError(
+        submitReviewError instanceof
+          Error
+          ? submitReviewError.message
+          : "Unable to submit review.",
+      );
+
+    } finally {
+      setSubmitting(
+        false,
+      );
+    }
+  }
+
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
+      <aside>
+        <h2 className="text-[15px] font-bold text-[#101828]">
+          Customer reviews
+        </h2>
+
+
+        <div className="mt-4 rounded-[6px] border border-[#e4e7ec] bg-[#fafbfc] p-5">
+          <div className="flex items-end gap-2">
+            <span className="text-[32px] font-bold tracking-[-0.04em] text-[#101828]">
+              {
+                product.rating_average.toFixed(
+                  1,
+                )
+              }
+            </span>
+
+            <span className="pb-1 text-[10px] text-[#667085]">
+              / 5
+            </span>
+          </div>
+
+
+          <div className="mt-2 flex gap-1">
+            {[
+              1,
+              2,
+              3,
+              4,
+              5,
+            ].map(
+              (
+                star,
+              ) => (
+                <Star
+                  key={
+                    star
+                  }
+                  className={
+                    star <=
+                    Math.round(
+                      product.rating_average,
+                    )
+                      ? "h-4 w-4 fill-[#f4b740] text-[#f4b740]"
+                      : "h-4 w-4 text-[#d0d5dd]"
+                  }
+                />
+              ),
+            )}
+          </div>
+
+
+          <p className="mt-3 text-[10px] text-[#667085]">
+            Based on{" "}
+            {
+              product.review_count
+            }{" "}
+            {
+              product.review_count ===
+              1
+                ? "review"
+                : "reviews"
+            }
+          </p>
+        </div>
+
+
+        <div className="mt-6">
+          <h3 className="text-[12px] font-bold text-[#101828]">
+            Write a review
+          </h3>
+
+
+          {!signedIn && (
+            <div className="mt-3 rounded-[6px] border border-[#dfe3e8] bg-[#f8fafc] p-4">
+              <p className="text-[10px] leading-5 text-[#667085]">
+                Sign in to review products you have purchased and received.
+              </p>
+
+              <Link
+                href="/login"
+                className="mt-3 inline-flex h-9 items-center justify-center rounded-[4px] bg-[#071b2d] px-4 text-[9px] font-bold text-white"
+              >
+                Sign in to review
+              </Link>
+            </div>
+          )}
+
+
+          {signedIn &&
+            eligibilityLoading && (
+            <div className="mt-3 flex items-center gap-2 text-[10px] text-[#667085]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+
+              Checking purchase eligibility...
+            </div>
+          )}
+
+
+          {signedIn &&
+            !eligibilityLoading &&
+            eligibilityError && (
+            <div className="mt-3 rounded-[6px] border border-[#fecdca] bg-[#fff4f5] p-4 text-[9px] leading-5 text-[#b42318]">
+              {
+                eligibilityError
+              }
+            </div>
+          )}
+
+
+          {signedIn &&
+            !eligibilityLoading &&
+            !eligibilityError &&
+            eligibility &&
+            !eligibility.eligible && (
+            <div className="mt-3 rounded-[6px] border border-[#e4e7ec] bg-[#fafbfc] p-4">
+              <p className="text-[10px] leading-5 text-[#667085]">
+                {
+                  eligibility.reason ??
+                  "This product is not currently eligible for review."
+                }
+              </p>
+            </div>
+          )}
+
+
+          {signedIn &&
+            eligibility?.eligible && (
+            <form
+              onSubmit={
+                submitReview
+              }
+              className="mt-4"
+            >
+              <p className="text-[9px] font-semibold text-[#475467]">
+                Your rating
+              </p>
+
+
+              <div className="mt-2 flex gap-1">
+                {[
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                ].map(
+                  (
+                    star,
+                  ) => (
+                    <button
+                      key={
+                        star
+                      }
+                      type="button"
+                      onClick={() =>
+                        setRating(
+                          star,
+                        )
+                      }
+                      aria-label={`Rate ${star} star${star === 1 ? "" : "s"}`}
+                      className="rounded-[4px] p-1 transition hover:bg-[#fff8e6]"
+                    >
+                      <Star
+                        className={
+                          star <=
+                          rating
+                            ? "h-6 w-6 fill-[#f4b740] text-[#f4b740]"
+                            : "h-6 w-6 text-[#d0d5dd]"
+                        }
+                      />
+                    </button>
+                  ),
+                )}
+              </div>
+
+
+              <label className="mt-4 block">
+                <span className="text-[9px] font-semibold text-[#475467]">
+                  Your review
+                </span>
+
+                <textarea
+                  value={
+                    comment
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setComment(
+                      event.target.value,
+                    )
+                  }
+                  maxLength={
+                    2000
+                  }
+                  rows={
+                    5
+                  }
+                  placeholder="How did this part perform?"
+                  className="mt-2 w-full resize-none rounded-[6px] border border-[#d0d5dd] bg-white px-3 py-3 text-[10px] leading-5 text-[#344054] outline-none transition focus:border-[#98a2b3]"
+                />
+
+                <span className="mt-1 block text-right text-[8px] text-[#98a2b3]">
+                  {
+                    comment.length
+                  }
+                  /2000
+                </span>
+              </label>
+
+
+              {submitError && (
+                <p className="mt-3 text-[9px] leading-4 text-[#b42318]">
+                  {
+                    submitError
+                  }
+                </p>
+              )}
+
+
+              <button
+                type="submit"
+                disabled={
+                  submitting
+                }
+                className="mt-4 flex h-10 w-full items-center justify-center rounded-[4px] bg-[#e31b2d] px-4 text-[10px] font-bold text-white transition hover:bg-[#c81424] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {
+                  submitting
+                    ? "Submitting..."
+                    : "Submit review"
+                }
+              </button>
+            </form>
+          )}
+
+
+          {success && (
+            <div className="mt-4 rounded-[6px] border border-[#abefc6] bg-[#ecfdf3] p-4 text-[9px] font-medium leading-5 text-[#067647]">
+              {
+                success
+              }
+            </div>
+          )}
+        </div>
+      </aside>
+
+
+      <section>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-[15px] font-bold text-[#101828]">
+              Verified customer feedback
+            </h3>
+
+            <p className="mt-1 text-[10px] text-[#667085]">
+              Reviews are accepted after a delivered purchase.
+            </p>
+          </div>
+        </div>
+
+
+        {reviewsLoading && (
+          <div className="mt-5 space-y-3">
+            {[
+              1,
+              2,
+              3,
+            ].map(
+              (
+                item,
+              ) => (
+                <div
+                  key={
+                    item
+                  }
+                  className="h-[120px] animate-pulse rounded-[6px] bg-[#f2f4f7]"
+                />
+              ),
+            )}
+          </div>
+        )}
+
+
+        {!reviewsLoading &&
+          reviewsError && (
+          <div className="mt-5 rounded-[6px] border border-[#fecdca] bg-[#fff4f5] p-4 text-[9px] text-[#b42318]">
+            {
+              reviewsError
+            }
+          </div>
+        )}
+
+
+        {!reviewsLoading &&
+          !reviewsError &&
+          reviews.length ===
+            0 && (
+          <div className="mt-5 rounded-[6px] border border-dashed border-[#d0d5dd] bg-[#fafbfc] px-5 py-10 text-center">
+            <Star className="mx-auto h-7 w-7 text-[#98a2b3]" />
+
+            <p className="mt-3 text-[11px] font-bold text-[#344054]">
+              No reviews yet
+            </p>
+
+            <p className="mt-1 text-[9px] text-[#667085]">
+              Be the first verified customer to review this product.
+            </p>
+          </div>
+        )}
+
+
+        {!reviewsLoading &&
+          !reviewsError &&
+          reviews.length >
+            0 && (
+          <div className="mt-5 divide-y divide-[#eaecf0] rounded-[6px] border border-[#e4e7ec]">
+            {reviews.map(
+              (
+                review,
+              ) => (
+                <article
+                  key={
+                    review.id
+                  }
+                  className="p-5"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold text-[#101828]">
+                        {
+                          review.customer_name
+                        }
+                      </p>
+
+
+                      {review.verified_purchase && (
+                        <span className="mt-2 inline-flex rounded-full border border-[#abefc6] bg-[#ecfdf3] px-2 py-1 text-[7px] font-bold uppercase tracking-[0.05em] text-[#067647]">
+                          Verified purchase
+                        </span>
+                      )}
+                    </div>
+
+
+                    <time className="text-[8px] text-[#98a2b3]">
+                      {
+                        formatReviewDate(
+                          review.created_at,
+                        )
+                      }
+                    </time>
+                  </div>
+
+
+                  <div className="mt-3 flex gap-0.5">
+                    {[
+                      1,
+                      2,
+                      3,
+                      4,
+                      5,
+                    ].map(
+                      (
+                        star,
+                      ) => (
+                        <Star
+                          key={
+                            star
+                          }
+                          className={
+                            star <=
+                            review.rating
+                              ? "h-3.5 w-3.5 fill-[#f4b740] text-[#f4b740]"
+                              : "h-3.5 w-3.5 text-[#d0d5dd]"
+                          }
+                        />
+                      ),
+                    )}
+                  </div>
+
+
+                  <p className="mt-3 whitespace-pre-wrap text-[11px] leading-6 text-[#475467]">
+                    {
+                      review.comment
+                    }
+                  </p>
+                </article>
+              ),
+            )}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+
+function formatReviewDate(
+  value: string,
+): string {
+  const date =
+    new Date(
+      value,
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return value;
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month:
+        "short",
+
+      day:
+        "2-digit",
+
+      year:
+        "numeric",
+    },
+  ).format(
+    date,
+  );
+}
+
+
+/* ============================================================
+   QUICK INFO
+============================================================ */
+
+function QuickInfo({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-[4px] border border-[#e4e7ec] bg-[#fafbfc] px-4 py-3">
+      <p className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#98a2b3]">
+        {label}
+      </p>
+
+      <p className="mt-1 text-[11px] font-semibold text-[#344054]">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function formatSlug(
+  value: string,
+) {
+  return value
+    .replace(
+      /[-_]+/g,
+      " ",
+    )
+    .replace(
+      /\b\w/g,
+      (character) =>
+        character.toUpperCase(),
+    );
+}
+
+
+function formatSpecificationValue(
+  value: unknown,
+): string {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "Not specified";
+  }
+
+  if (
+    typeof value ===
+    "boolean"
+  ) {
+    return value
+      ? "Yes"
+      : "No";
+  }
+
+  if (
+    typeof value ===
+      "string" ||
+    typeof value ===
+      "number"
+  ) {
+    return String(
+      value,
+    );
+  }
+
+  if (
+    Array.isArray(
+      value,
+    )
+  ) {
+    return value
+      .map(
+        (item) =>
+          String(
+            item,
+          ),
+      )
+      .join(", ");
+  }
+
+  if (
+    typeof value ===
+    "object"
+  ) {
+    try {
+      return JSON.stringify(
+        value,
+      );
+    } catch {
+      return "Not specified";
+    }
+  }
+
+  return String(
+    value,
+  );
+}
+
+
+function getReferenceImage(
+  product: Product,
+): string | null {
+  const text = [
+    product.name,
+    product.description,
+    product.sku,
+    product.part_number,
+    product.subcategory_slug,
+  ]
+    .join(
+      " ",
+    )
+    .toLowerCase();
+
+  const rules: {
+    keywords: string[];
+    image: string;
+  }[] = [
+    {
+      keywords: [
+        "brake pad",
+      ],
+      image:
+        "/product-parts/brake-pad.svg",
+    },
+    {
+      keywords: [
+        "brake rotor",
+      ],
+      image:
+        "/product-parts/brake-rotor.svg",
+    },
+    {
+      keywords: [
+        "brake caliper",
+      ],
+      image:
+        "/product-parts/brake-caliper.svg",
+    },
+    {
+      keywords: [
+        "wheel speed sensor",
+        "abs sensor",
+      ],
+      image:
+        "/product-parts/abs-wheel-speed-sensor.svg",
+    },
+    {
+      keywords: [
+        "brake hose",
+      ],
+      image:
+        "/product-parts/brake-hose.svg",
+    },
+    {
+      keywords: [
+        "brake fluid",
+      ],
+      image:
+        "/product-parts/brake-fluid.svg",
+    },
+    {
+      keywords: [
+        "master cylinder",
+      ],
+      image:
+        "/product-parts/brake-master-cylinder.svg",
+    },
+    {
+      keywords: [
+        "shock absorber",
+      ],
+      image:
+        "/product-parts/shock-absorber.jpg",
+    },
+    {
+      keywords: [
+        "strut assembly",
+        "gas strut",
+      ],
+      image:
+        "/product-parts/strut-assembly.jpg",
+    },
+    {
+      keywords: [
+        "control arm",
+      ],
+      image:
+        "/product-parts/control-arm.jpg",
+    },
+    {
+      keywords: [
+        "wheel hub bearing",
+        "wheel bearing assembly",
+      ],
+      image:
+        "/product-parts/wheel-hub-bearing.jpg",
+    },
+    {
+      keywords: [
+        "outer tie rod",
+      ],
+      image:
+        "/product-parts/outer-tie-rod.jpg",
+    },
+    {
+      keywords: [
+        "inner tie rod",
+      ],
+      image:
+        "/product-parts/inner-tie-rod.svg",
+    },
+    {
+      keywords: [
+        "power steering pressure hose",
+        "power steering hose",
+      ],
+      image:
+        "/product-parts/power-steering-pressure-hose.jpg",
+    },
+    {
+      keywords: [
+        "power steering pump",
+      ],
+      image:
+        "/product-parts/power-steering-pump.jpg",
+    },
+  ];
+
+  const match =
+    rules.find(
+      (rule) =>
+        rule.keywords.some(
+          (keyword) =>
+            text.includes(
+              keyword,
+            ),
+        ),
+    );
+
+  return (
+    match?.image ??
+    null
+  );
+}
