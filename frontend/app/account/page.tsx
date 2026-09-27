@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { CustomerNavbarBrand, CustomerNavbarLinks, CustomerNavbarCart } from "@/components/customer/CustomerNavbarParts";
+
 import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
 
 import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
@@ -37,7 +39,6 @@ import {
   Package,
   Search,
   ShoppingBag,
-  ShoppingCart,
   Sparkles,
   UserRound,
   type LucideIcon,
@@ -1264,54 +1265,10 @@ function VehnexaNavbar() {
       className="sticky top-0 z-50 border-b border-white/[0.07] bg-[#061827]/95 shadow-[0_8px_30px_rgba(0,0,0,.08)] backdrop-blur-xl"
     >
       <div className="mx-auto flex h-[66px] max-w-[1480px] items-center px-4 sm:px-6 lg:px-8">
-        <Link
-          href="/"
-          className="group flex shrink-0 items-center gap-2.5"
-        >
-          <motion.div
-            whileHover={
-              reduceMotion
-                ? undefined
-                : {
-                    rotate:
-                      -4,
-
-                    scale:
-                      1.06,
-                  }
-            }
-          >
-            <VehnexaMark />
-          </motion.div>
+        <CustomerNavbarBrand />
 
 
-          <span className="text-[14px] font-black tracking-[-0.025em] text-white">
-            Vehnexa
-          </span>
-        </Link>
-
-
-        <nav className="ml-10 hidden h-full items-center gap-8 lg:flex">
-          <TopNavLink
-            href="/shop"
-            label="Shop"
-          />
-
-          <TopNavLink
-            href="/account/garage"
-            label="My Garage"
-          />
-
-          <TopNavLink
-            href="/ai-mechanic"
-            label="AI Mechanic"
-          />
-
-          <TopNavLink
-            href="/#resources"
-            label="Resources"
-          />
-        </nav>
+        <CustomerNavbarLinks />
 
 
         <div className="ml-auto flex items-center gap-1.5">
@@ -1324,13 +1281,7 @@ function VehnexaNavbar() {
           </Link>
 
 
-          <Link
-            href="/cart"
-            aria-label="Shopping cart"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#c7d3dc] transition hover:bg-white/[0.06] hover:text-white"
-          >
-            <ShoppingCart className="h-[16px] w-[16px]" />
-          </Link>
+          <CustomerNavbarCart />
 
 
           <NavbarNotificationBell />
@@ -2295,78 +2246,12 @@ function EmptySummary({
    TOP NAV
 ============================================================ */
 
-function TopNavLink({
-  href,
-  label,
-}: {
-  href:
-    string;
-
-  label:
-    string;
-}) {
-  return (
-    <Link
-      href={
-        href
-      }
-      className="group relative flex h-full items-center text-[9px] font-semibold text-[#bcc9d3] transition hover:text-white"
-    >
-      {
-        label
-      }
-
-      <span className="absolute bottom-0 left-1/2 h-[2px] w-0 -translate-x-1/2 bg-[#e31b2d] transition-all duration-300 group-hover:w-full" />
-    </Link>
-  );
-}
 
 
 /* ============================================================
    MARK
 ============================================================ */
 
-function VehnexaMark() {
-  return (
-    <div
-      className="relative h-[25px] w-[30px] shrink-0"
-      aria-hidden="true"
-    >
-      <span
-        className="absolute left-0 top-[2px] h-[18px] w-[12px] bg-[#f03a45]"
-        style={{
-          clipPath:
-            "polygon(0 0, 100% 0, 66% 100%, 42% 100%)",
-
-          transform:
-            "skewX(7deg)",
-        }}
-      />
-
-      <span
-        className="absolute left-[8px] top-[5px] h-[18px] w-[13px] bg-[#f08c2e]"
-        style={{
-          clipPath:
-            "polygon(0 0, 100% 0, 52% 100%, 30% 100%)",
-
-          transform:
-            "skewX(-4deg)",
-        }}
-      />
-
-      <span
-        className="absolute right-0 top-[2px] h-[20px] w-[16px] bg-[#d9e1e8]"
-        style={{
-          clipPath:
-            "polygon(12% 0, 100% 0, 53% 100%, 0 100%)",
-
-          transform:
-            "skewX(-7deg)",
-        }}
-      />
-    </div>
-  );
-}
 
 
 /* ============================================================

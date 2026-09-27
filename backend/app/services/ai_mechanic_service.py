@@ -1,0 +1,1278 @@
+from datetime import (
+    datetime,
+    timezone,
+)
+
+from functools import wraps
+import logging
+import time
+
+from app.core.ai_config import (
+    ai_settings,
+)
+from app.core.ai_component_registry import (
+    get_component_definition,
+)
+from app.core.ai_safety_policy import (
+    evaluate_ai_safety_backstop,
+)
+from app.repositories.ai_mechanic_repository import (
+    ai_mechanic_session_repository,
+)
+from app.repositories.vehicle_repository import (
+    vehicle_repository,
+)
+from app.schemas.ai_mechanic import (
+    AIComponentSuggestion,
+    AIMechanicContinueRequest,
+    AISafety,
+    AIMechanicMessage,
+    AIMechanicSessionPublic,
+    AIMechanicStartRequest,
+    AIMechanicTurn,
+)
+from app.services.ai_product_recommendation_service import (
+    ai_product_recommendation_service,
+)
+from app.services.fitment_service import (
+    FitmentVehicleNotFoundError,
+)
+from app.services.ollama_ai_mechanic_engine import (
+    AIMechanicEngineError,
+    OllamaAIMechanicEngine,
+)
+
+
+AI_TIMING_LOGGER = logging.getLogger(
+    "uvicorn.error"
+)
+
+
+def timed_ai_service_call(
+    operation_name: str,
+):
+    def decorator(
+        function,
+    ):
+        @wraps(
+            function
+        )
+        def wrapper(
+            *args,
+            **kwargs,
+        ):
+            started = (
+                time.perf_counter()
+            )
+
+            try:
+                return function(
+                    *args,
+                    **kwargs,
+                )
+
+            finally:
+                elapsed_ms = (
+                    (
+                        time.perf_counter()
+                        - started
+                    )
+                    * 1000
+                )
+
+                AI_TIMING_LOGGER.info(
+                    "[AI TIMING] "
+                    "%s "
+                    "service_total_ms=%.2f",
+                    operation_name,
+                    elapsed_ms,
+                )
+
+        return wrapper
+
+    return decorator
+
+
+# ============================================================
+# DOMAIN ERRORS
+# ============================================================
+
+class AIMechanicVehicleNotFoundError(
+    Exception
+):
+    pass
+
+
+class AIMechanicSessionNotFoundError(
+    Exception
+):
+    pass
+
+
+class AIMechanicSessionClosedError(
+    Exception
+):
+    pass
+
+
+# ============================================================
+# AI MECHANIC SERVICE
+# ============================================================
+
+class AIMechanicService:
+    def __init__(
+        self,
+        *,
+        session_repository,
+        vehicle_repository,
+        ai_engine,
+        product_recommendation_service=None,
+    ):
+        self.session_repository = (
+            session_repository
+        )
+
+        self.vehicle_repository = (
+            vehicle_repository
+        )
+
+        self.ai_engine = (
+            ai_engine
+        )
+
+        self.product_recommendation_service = (
+            product_recommendation_service
+        )
+
+    # ========================================================
+    # AI TIMING HELPERS
+    # ========================================================
+
+    def _timed_engine_analyze(
+        self,
+        *,
+        vehicle: dict,
+        messages: list[dict],
+    ):
+        started = (
+            time.perf_counter()
+        )
+
+        try:
+            return (
+                self.ai_engine
+                .analyze(
+                    vehicle=vehicle,
+                    messages=messages,
+                )
+            )
+
+        finally:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started
+                )
+                * 1000
+            )
+
+            AI_TIMING_LOGGER.info(
+                "[AI TIMING] "
+                "engine_total "
+                "wall_ms=%.2f",
+                elapsed_ms,
+            )
+
+
+    def _timed_normalize_components(
+        self,
+        turn: AIMechanicTurn,
+    ) -> AIMechanicTurn:
+        started = (
+            time.perf_counter()
+        )
+
+        try:
+            return (
+                self
+                ._normalize_turn_components(
+                    turn
+                )
+            )
+
+        finally:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started
+                )
+                * 1000
+            )
+
+            AI_TIMING_LOGGER.info(
+                "[AI TIMING] "
+                "component_registry "
+                "wall_ms=%.2f",
+                elapsed_ms,
+            )
+
+
+    def _timed_safety_backstop(
+        self,
+        turn: AIMechanicTurn,
+        messages: list[dict],
+    ) -> AIMechanicTurn:
+        started = (
+            time.perf_counter()
+        )
+
+        try:
+            return (
+                self
+                ._apply_safety_backstop(
+                    turn,
+                    messages,
+                )
+            )
+
+        finally:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started
+                )
+                * 1000
+            )
+
+            AI_TIMING_LOGGER.info(
+                "[AI TIMING] "
+                "safety_backstop "
+                "wall_ms=%.2f",
+                elapsed_ms,
+            )
+
+
+    def _timed_product_lookup(
+        self,
+        *,
+        vehicle_id: str,
+        user_id: str,
+        components,
+    ):
+        started = (
+            time.perf_counter()
+        )
+
+        try:
+            return (
+                self
+                .product_recommendation_service
+                .get_for_components(
+                    vehicle_id=vehicle_id,
+                    user_id=user_id,
+                    components=components,
+                )
+            )
+
+        finally:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started
+                )
+                * 1000
+            )
+
+            AI_TIMING_LOGGER.info(
+                "[AI TIMING] "
+                "fitment_product_lookup "
+                "wall_ms=%.2f",
+                elapsed_ms,
+            )
+
+
+    # ========================================================
+    # START SESSION
+    # ========================================================
+
+    @timed_ai_service_call("start_session")
+    def start_session(
+        self,
+        current_user: dict,
+        payload: AIMechanicStartRequest,
+    ) -> AIMechanicSessionPublic:
+        user_id = current_user[
+            "_id"
+        ]
+
+        # ----------------------------------------------------
+        # Vehicle documents currently store user_id as string.
+        #
+        # Keep the original ObjectId for AI Mechanic session
+        # ownership, but use this string value when querying
+        # My Garage.
+        # ----------------------------------------------------
+
+        vehicle_user_id = str(
+            user_id
+        )
+
+        # ----------------------------------------------------
+        # Verify selected Garage vehicle ownership
+        # ----------------------------------------------------
+
+        vehicle = (
+            self.vehicle_repository
+            .find_owned_by_id(
+                payload.vehicle_id,
+                vehicle_user_id,
+            )
+        )
+
+        if vehicle is None:
+            raise (
+                AIMechanicVehicleNotFoundError(
+                    "Vehicle not found."
+                )
+            )
+
+        now = datetime.now(
+            timezone.utc
+        )
+
+        # ----------------------------------------------------
+        # Initial user message
+        # ----------------------------------------------------
+
+        user_message = (
+            AIMechanicMessage(
+                role="user",
+                content=payload.message,
+                created_at=now,
+            )
+        )
+
+        messages = [
+            user_message.model_dump(
+                mode="python"
+            )
+        ]
+
+        # ----------------------------------------------------
+        # Create persistent session first
+        #
+        # IMPORTANT:
+        # AI Mechanic sessions keep the authenticated user's
+        # original MongoDB ObjectId.
+        # ----------------------------------------------------
+
+        session_document = {
+            "user_id": user_id,
+            "vehicle_id": vehicle[
+                "_id"
+            ],
+            "status": (
+                "waiting_for_user"
+            ),
+            "messages": messages,
+            "latest_turn": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        session = (
+            self.session_repository
+            .create(
+                session_document
+            )
+        )
+
+        # ----------------------------------------------------
+        # Ask AI engine to analyze conversation
+        # ----------------------------------------------------
+
+        turn = self._analyze(
+            vehicle=vehicle,
+            messages=messages,
+        )
+
+        # ----------------------------------------------------
+        # Store assistant response as conversation message
+        # ----------------------------------------------------
+
+        assistant_message = (
+            AIMechanicMessage(
+                role="assistant",
+                content=(
+                    turn.assistant_message
+                ),
+                created_at=datetime.now(
+                    timezone.utc
+                ),
+            )
+        )
+
+        messages.append(
+            assistant_message.model_dump(
+                mode="python"
+            )
+        )
+
+        status = (
+            self._status_for_turn(
+                turn
+            )
+        )
+
+        updated_at = datetime.now(
+            timezone.utc
+        )
+
+        turn_document = (
+            turn.model_dump(
+                mode="python"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Persist AI result
+        # ----------------------------------------------------
+
+        updated = (
+            self.session_repository
+            .update_turn(
+                session_id=str(
+                    session["_id"]
+                ),
+                user_id=user_id,
+                messages=messages,
+                latest_turn=(
+                    turn_document
+                ),
+                status=status,
+                updated_at=updated_at,
+            )
+        )
+
+        if not updated:
+            raise (
+                AIMechanicSessionNotFoundError(
+                    "AI Mechanic session "
+                    "could not be updated."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Keep local document synchronized.
+        #
+        # MongoDB update_one() does not mutate the dict
+        # already stored in this method.
+        # ----------------------------------------------------
+
+        session[
+            "messages"
+        ] = messages
+
+        session[
+            "latest_turn"
+        ] = turn_document
+
+        session[
+            "status"
+        ] = status
+
+        session[
+            "updated_at"
+        ] = updated_at
+
+        # ----------------------------------------------------
+        # Return completed public session
+        # ----------------------------------------------------
+
+        return self._to_public(
+            session
+        )
+
+    # ========================================================
+    # CONTINUE SESSION
+    # ========================================================
+
+    @timed_ai_service_call("continue_session")
+    def continue_session(
+        self,
+        current_user: dict,
+        session_id: str,
+        payload: AIMechanicContinueRequest,
+    ) -> AIMechanicSessionPublic:
+        user_id = current_user[
+            "_id"
+        ]
+
+        # ----------------------------------------------------
+        # Vehicle documents use string user_id.
+        #
+        # AI Mechanic sessions continue to use the original
+        # MongoDB ObjectId for ownership checks.
+        # ----------------------------------------------------
+
+        vehicle_user_id = str(
+            user_id
+        )
+
+        # ----------------------------------------------------
+        # Session must belong to current user
+        # ----------------------------------------------------
+
+        session = (
+            self.session_repository
+            .find_owned_by_id(
+                session_id,
+                user_id,
+            )
+        )
+
+        if session is None:
+            raise (
+                AIMechanicSessionNotFoundError(
+                    "AI Mechanic session "
+                    "not found."
+                )
+            )
+
+        if (
+            session.get(
+                "status"
+            )
+            == "closed"
+        ):
+            raise (
+                AIMechanicSessionClosedError(
+                    "AI Mechanic session "
+                    "is closed."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Re-check Garage vehicle ownership.
+        #
+        # We never trust vehicle information supplied
+        # by the browser on later turns.
+        # ----------------------------------------------------
+
+        vehicle = (
+            self.vehicle_repository
+            .find_owned_by_id(
+                str(
+                    session[
+                        "vehicle_id"
+                    ]
+                ),
+                vehicle_user_id,
+            )
+        )
+
+        if vehicle is None:
+            raise (
+                AIMechanicVehicleNotFoundError(
+                    "Vehicle not found."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Existing conversation
+        # ----------------------------------------------------
+
+        messages = list(
+            session.get(
+                "messages",
+                [],
+            )
+        )
+
+        # ----------------------------------------------------
+        # Append user's follow-up answer
+        # ----------------------------------------------------
+
+        user_message = (
+            AIMechanicMessage(
+                role="user",
+                content=payload.message,
+                created_at=datetime.now(
+                    timezone.utc
+                ),
+            )
+        )
+
+        messages.append(
+            user_message.model_dump(
+                mode="python"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Ask AI again using full conversation
+        # ----------------------------------------------------
+
+        turn = self._analyze(
+            vehicle=vehicle,
+            messages=messages,
+        )
+
+        # ----------------------------------------------------
+        # Append new assistant response
+        # ----------------------------------------------------
+
+        assistant_message = (
+            AIMechanicMessage(
+                role="assistant",
+                content=(
+                    turn.assistant_message
+                ),
+                created_at=datetime.now(
+                    timezone.utc
+                ),
+            )
+        )
+
+        messages.append(
+            assistant_message.model_dump(
+                mode="python"
+            )
+        )
+
+        status = (
+            self._status_for_turn(
+                turn
+            )
+        )
+
+        updated_at = datetime.now(
+            timezone.utc
+        )
+
+        turn_document = (
+            turn.model_dump(
+                mode="python"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Persist latest conversation state
+        # ----------------------------------------------------
+
+        updated = (
+            self.session_repository
+            .update_turn(
+                session_id=session_id,
+                user_id=user_id,
+                messages=messages,
+                latest_turn=(
+                    turn_document
+                ),
+                status=status,
+                updated_at=updated_at,
+            )
+        )
+
+        if not updated:
+            raise (
+                AIMechanicSessionNotFoundError(
+                    "AI Mechanic session "
+                    "could not be updated."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Keep local session document synchronized
+        # ----------------------------------------------------
+
+        session[
+            "messages"
+        ] = messages
+
+        session[
+            "latest_turn"
+        ] = turn_document
+
+        session[
+            "status"
+        ] = status
+
+        session[
+            "updated_at"
+        ] = updated_at
+
+        return self._to_public(
+            session
+        )
+
+    # ========================================================
+    # GET SESSION
+    # ========================================================
+
+    @timed_ai_service_call("get_session")
+    def get_session(
+        self,
+        current_user: dict,
+        session_id: str,
+    ) -> AIMechanicSessionPublic:
+        user_id = current_user[
+            "_id"
+        ]
+
+        session = (
+            self.session_repository
+            .find_owned_by_id(
+                session_id,
+                user_id,
+            )
+        )
+
+        if session is None:
+            raise (
+                AIMechanicSessionNotFoundError(
+                    "AI Mechanic session "
+                    "not found."
+                )
+            )
+
+        return self._to_public(
+            session
+        )
+
+    # ========================================================
+    # COMPONENT NORMALIZATION
+    # ========================================================
+
+    @staticmethod
+    def _normalize_turn_components(
+        turn: AIMechanicTurn,
+    ) -> AIMechanicTurn:
+        # ----------------------------------------------------
+        # Follow-up turns may legitimately contain no
+        # component suggestions.
+        # ----------------------------------------------------
+
+        if (
+            turn.response_type
+            == "follow_up"
+        ):
+            return turn
+
+        # ----------------------------------------------------
+        # Analysis components must be mapped through Vehnexa's
+        # server-owned registry.
+        #
+        # Qwen is trusted for:
+        #
+        # - component_key suggestion
+        # - relevance
+        # - explanation
+        #
+        # Qwen is NOT trusted for:
+        #
+        # - display label
+        # - catalog mapping
+        # - 3D hotspot mapping
+        #
+        # Those values always come from the backend registry.
+        # ----------------------------------------------------
+
+        normalized_components = []
+
+        seen_component_keys: set[
+            str
+        ] = set()
+
+        for component in (
+            turn.components
+        ):
+            definition = (
+                get_component_definition(
+                    component.component_key
+                )
+            )
+
+            # ------------------------------------------------
+            # Unknown AI-created component keys are ignored.
+            # They are never allowed to become trusted
+            # catalog or 3D mappings.
+            # ------------------------------------------------
+
+            if definition is None:
+                continue
+
+            # ------------------------------------------------
+            # Avoid duplicate suggestions for the same trusted
+            # component key.
+            # ------------------------------------------------
+
+            if (
+                definition.component_key
+                in seen_component_keys
+            ):
+                continue
+
+            seen_component_keys.add(
+                definition.component_key
+            )
+
+            normalized_components.append(
+                AIComponentSuggestion(
+                    component_key=(
+                        definition
+                        .component_key
+                    ),
+                    label=(
+                        definition
+                        .label
+                    ),
+                    catalog_key=(
+                        definition
+                        .catalog_key
+                    ),
+                    hotspot_key=(
+                        definition
+                        .hotspot_key
+                    ),
+                    relevance=(
+                        component
+                        .relevance
+                    ),
+                    explanation=(
+                        component
+                        .explanation
+                    ),
+                )
+            )
+
+        # ----------------------------------------------------
+        # AIMechanicTurn requires an analysis to contain at
+        # least one component.
+        #
+        # If Qwen supplied only invented/unregistered keys,
+        # treat that as invalid AI output rather than trusting
+        # arbitrary mappings.
+        # ----------------------------------------------------
+
+        if (
+            len(
+                normalized_components
+            )
+            == 0
+        ):
+            raise (
+                AIMechanicEngineError(
+                    "AI Mechanic analysis did not "
+                    "contain any registered "
+                    "component suggestions."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Rebuild and revalidate the full turn.
+        # ----------------------------------------------------
+
+        return AIMechanicTurn(
+            response_type=(
+                turn.response_type
+            ),
+            assistant_message=(
+                turn.assistant_message
+            ),
+            follow_up_question=(
+                turn.follow_up_question
+            ),
+            possible_causes=(
+                turn.possible_causes
+            ),
+            components=(
+                normalized_components
+            ),
+            safety=(
+                turn.safety
+            ),
+        )
+
+    # ========================================================
+    # DETERMINISTIC SAFETY BACKSTOP
+    # ========================================================
+
+    @staticmethod
+    def _apply_safety_backstop(
+        turn: AIMechanicTurn,
+        messages: list[dict],
+    ) -> AIMechanicTurn:
+        # ----------------------------------------------------
+        # The backstop evaluates USER statements only.
+        #
+        # It may upgrade safety but may never downgrade the
+        # safety level already returned by Qwen.
+        # ----------------------------------------------------
+
+        decision = (
+            evaluate_ai_safety_backstop(
+                messages
+            )
+        )
+
+        if decision is None:
+            return turn
+
+        safety_rank = {
+            "normal": 0,
+            "caution": 1,
+            "urgent": 2,
+        }
+
+        current_rank = (
+            safety_rank[
+                turn.safety.level
+            ]
+        )
+
+        backstop_rank = (
+            safety_rank[
+                decision.level
+            ]
+        )
+
+        # ----------------------------------------------------
+        # Preserve Qwen's existing safety result whenever it is
+        # equal to or stronger than the deterministic policy.
+        # ----------------------------------------------------
+
+        if (
+            current_rank
+            >= backstop_rank
+        ):
+            return turn
+
+        # ----------------------------------------------------
+        # Rebuild through Pydantic so the upgraded result still
+        # satisfies the exact AIMechanicTurn contract.
+        # ----------------------------------------------------
+
+        turn_data = (
+            turn.model_dump(
+                mode="python"
+            )
+        )
+
+        turn_data[
+            "safety"
+        ] = AISafety(
+            level=(
+                decision.level
+            ),
+            message=(
+                decision.message
+            ),
+        ).model_dump(
+            mode="python"
+        )
+
+        return (
+            AIMechanicTurn
+            .model_validate(
+                turn_data
+            )
+        )
+
+    # ========================================================
+    # AI ANALYSIS
+    # ========================================================
+
+    def _analyze(
+        self,
+        *,
+        vehicle: dict,
+        messages: list[dict],
+    ) -> AIMechanicTurn:
+        result = (
+            self._timed_engine_analyze(
+                vehicle=vehicle,
+                messages=messages,
+            )
+        )
+
+        # ----------------------------------------------------
+        # Fake engines in tests may already return a validated
+        # AIMechanicTurn.
+        #
+        # Provider adapters may instead return dictionaries.
+        # ----------------------------------------------------
+
+        if not isinstance(
+            result,
+            AIMechanicTurn,
+        ):
+            result = (
+                AIMechanicTurn
+                .model_validate(
+                    result
+                )
+            )
+
+        # ----------------------------------------------------
+        # Never persist the AI provider's label/catalog/hotspot
+        # mappings directly.
+        #
+        # Normalize them through Vehnexa's trusted registry.
+        # ----------------------------------------------------
+
+        normalized_turn = (
+            self._timed_normalize_components(
+                result
+            )
+        )
+
+        # ----------------------------------------------------
+        # Final backend-owned safety guard before this turn is
+        # persisted into the AI Mechanic session.
+        # ----------------------------------------------------
+
+        return (
+            self._timed_safety_backstop(
+                normalized_turn,
+                messages,
+            )
+        )
+
+    # ========================================================
+    # SESSION STATUS
+    # ========================================================
+
+    @staticmethod
+    def _status_for_turn(
+        turn: AIMechanicTurn,
+    ) -> str:
+        if (
+            turn.response_type
+            == "follow_up"
+        ):
+            return (
+                "waiting_for_user"
+            )
+
+        return (
+            "analysis_ready"
+        )
+
+    # ========================================================
+    # PRODUCT RECOMMENDATIONS
+    # ========================================================
+
+    def _build_product_recommendations(
+        self,
+        *,
+        session: dict,
+        latest_turn,
+    ) -> list[dict]:
+        # ----------------------------------------------------
+        # Unit tests and non-marketplace use cases may create
+        # the service without a recommendation provider.
+        # ----------------------------------------------------
+
+        if (
+            self.product_recommendation_service
+            is None
+        ):
+            return []
+
+        # ----------------------------------------------------
+        # No AI result yet.
+        # ----------------------------------------------------
+
+        if latest_turn is None:
+            return []
+
+        # ----------------------------------------------------
+        # Convert persisted dictionary back into the trusted
+        # diagnostic schema when necessary.
+        # ----------------------------------------------------
+
+        if isinstance(
+            latest_turn,
+            AIMechanicTurn,
+        ):
+            turn = latest_turn
+
+        else:
+            turn = (
+                AIMechanicTurn
+                .model_validate(
+                    latest_turn
+                )
+            )
+
+        # ----------------------------------------------------
+        # Follow-up turns do not have a final component
+        # analysis and therefore do not trigger marketplace
+        # recommendations.
+        # ----------------------------------------------------
+
+        if (
+            turn.response_type
+            != "analysis"
+        ):
+            return []
+
+        if not turn.components:
+            return []
+
+        # ----------------------------------------------------
+        # IMPORTANT:
+        #
+        # user_id is stored as ObjectId in AI sessions but
+        # vehicle/fitment ownership uses the string form.
+        # ----------------------------------------------------
+
+        vehicle_id = str(
+            session[
+                "vehicle_id"
+            ]
+        )
+
+        user_id = str(
+            session[
+                "user_id"
+            ]
+        )
+
+        # ----------------------------------------------------
+        # Product IDs, prices, stock and compatibility are
+        # resolved only through Vehnexa's real fitment data.
+        # ----------------------------------------------------
+
+        try:
+            matches = (
+                self._timed_product_lookup(
+                    vehicle_id=vehicle_id,
+                    user_id=user_id,
+                    components=(
+                        turn.components
+                    ),
+                )
+            )
+
+        except FitmentVehicleNotFoundError:
+            # Historical AI sessions should still be readable
+            # even if the Garage vehicle was later removed.
+            return []
+
+        recommendations = []
+
+        for component in (
+            turn.components
+        ):
+            recommendations.append(
+                {
+                    "component_key": (
+                        component
+                        .component_key
+                    ),
+                    "catalog_key": (
+                        component
+                        .catalog_key
+                    ),
+                    "compatible_products": (
+                        matches.get(
+                            component.component_key,
+                            [],
+                        )
+                    ),
+                }
+            )
+
+        return recommendations
+
+    # ========================================================
+    # SERIALIZATION
+    # ========================================================
+
+    def _to_public(
+        self,
+        session: dict,
+    ) -> AIMechanicSessionPublic:
+        latest_turn = (
+            session.get(
+                "latest_turn"
+            )
+        )
+
+        product_recommendations = (
+            self._build_product_recommendations(
+                session=session,
+                latest_turn=latest_turn,
+            )
+        )
+
+        return (
+            AIMechanicSessionPublic(
+                id=str(
+                    session[
+                        "_id"
+                    ]
+                ),
+                vehicle_id=str(
+                    session[
+                        "vehicle_id"
+                    ]
+                ),
+                status=session[
+                    "status"
+                ],
+                messages=session.get(
+                    "messages",
+                    [],
+                ),
+                latest_turn=(
+                    latest_turn
+                ),
+                product_recommendations=(
+                    product_recommendations
+                ),
+                created_at=session[
+                    "created_at"
+                ],
+                updated_at=session[
+                    "updated_at"
+                ],
+            )
+        )
+
+
+# ============================================================
+# PRODUCTION INSTANCE
+# ============================================================
+
+ai_mechanic_service = (
+    AIMechanicService(
+        session_repository=(
+            ai_mechanic_session_repository
+        ),
+        vehicle_repository=(
+            vehicle_repository
+        ),
+        product_recommendation_service=(
+            ai_product_recommendation_service
+        ),
+        ai_engine=(
+            OllamaAIMechanicEngine(
+                host=(
+                    ai_settings
+                    .ollama_host
+                ),
+                model=(
+                    ai_settings
+                    .ollama_model
+                ),
+                timeout_seconds=(
+                    ai_settings
+                    .ollama_timeout_seconds
+                ),
+            )
+        ),
+    )
+)

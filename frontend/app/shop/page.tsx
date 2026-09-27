@@ -1,5 +1,7 @@
 "use client";
 
+import { CustomerNavbarBrand, CustomerNavbarLinks, CustomerNavbarCart } from "@/components/customer/CustomerNavbarParts";
+
 import PublicNavbarAuthActions from "@/components/customer/PublicNavbarAuthActions";
 
 import Link from "next/link";
@@ -38,10 +40,8 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
-  ShoppingCart,
   SlidersHorizontal,
   Star,
-  UserRound,
 } from "lucide-react";
 
 import {
@@ -4350,54 +4350,10 @@ function VehnexaNavbar({
       className="sticky top-0 z-50 border-b border-white/[0.07] bg-[#061827]/95 shadow-[0_8px_30px_rgba(0,0,0,.08)] backdrop-blur-xl"
     >
       <div className="mx-auto flex h-[66px] max-w-[1480px] items-center px-4 sm:px-6 lg:px-8">
-        <Link
-          href="/"
-          className="group flex items-center gap-2.5"
-        >
-          <motion.div
-            whileHover={
-              reduceMotion
-                ? undefined
-                : {
-                    rotate:
-                      -4,
-
-                    scale:
-                      1.06,
-                  }
-            }
-          >
-            <VehnexaMark />
-          </motion.div>
-
-          <span className="text-[14px] font-black tracking-[-0.025em] text-white">
-            Vehnexa
-          </span>
-        </Link>
+        <CustomerNavbarBrand />
 
 
-        <nav className="ml-10 hidden h-full items-center gap-8 lg:flex">
-          <TopNavLink
-            href="/shop"
-            label="Shop"
-            active
-          />
-
-          <TopNavLink
-            href="/account/garage"
-            label="My Garage"
-          />
-
-          <TopNavLink
-            href="/ai-mechanic"
-            label="AI Mechanic"
-          />
-
-          <TopNavLink
-            href="/#resources"
-            label="Resources"
-          />
-        </nav>
+        <CustomerNavbarLinks />
 
 
         <div className="ml-auto flex items-center gap-1.5">
@@ -4417,33 +4373,7 @@ function VehnexaNavbar({
           </button>
 
 
-          <Link
-            href="/cart"
-            className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#c7d3dc] transition hover:bg-white/[0.06] hover:text-white"
-            aria-label={`Cart with ${cartCount} items`}
-          >
-            <ShoppingCart className="h-[16px] w-[16px]" />
-
-            {cartCount >
-              0 && (
-              <motion.span
-                initial={{
-                  scale:
-                    0,
-                }}
-                animate={{
-                  scale:
-                    1,
-                }}
-                className="absolute right-0 top-0 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[7px] font-black text-white"
-              >
-                {cartCount >
-                99
-                  ? "99+"
-                  : cartCount}
-              </motion.span>
-            )}
-          </Link>
+          <CustomerNavbarCart count={cartCount} />
 
 
           <PublicNavbarAuthActions />
@@ -4454,51 +4384,8 @@ function VehnexaNavbar({
 }
 
 
-function TopNavLink({
-  href,
-  label,
-  active = false,
-}: {
-  href: string;
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <Link
-      href={
-        href
-      }
-      className={`group relative flex h-full items-center text-[9px] font-semibold transition ${
-        active
-          ? "text-white"
-          : "text-[#bcc9d3] hover:text-white"
-      }`}
-    >
-      {
-        label
-      }
-
-      <span
-        className={`absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 bg-[#e31b2d] transition-all duration-300 ${
-          active
-            ? "w-full"
-            : "w-0 group-hover:w-full"
-        }`}
-      />
-    </Link>
-  );
-}
 
 
-function VehnexaMark() {
-  return (
-    <div className="relative h-7 w-7">
-      <span className="absolute left-[1px] top-[3px] h-[22px] w-[10px] -skew-x-[25deg] rounded-[2px] bg-[#e31b2d]" />
-
-      <span className="absolute right-[2px] top-[3px] h-[22px] w-[10px] skew-x-[25deg] rounded-[2px] bg-[#d8dee5]" />
-    </div>
-  );
-}
 
 
 /* ============================================================
@@ -4508,7 +4395,23 @@ function VehnexaMark() {
 function ShopPageFallback() {
   return (
     <main className="min-h-screen bg-[#f5f7f9]">
-      <header className="h-[64px] bg-[#071b2d]" />
+      <header className="sticky top-0 z-50 border-b border-white/[0.07] bg-[#061827]/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-[66px] max-w-[1480px] items-center px-4 sm:px-6 lg:px-8">
+          <CustomerNavbarBrand />
+          <CustomerNavbarLinks />
+          <div className="ml-auto flex items-center gap-1.5">
+            <Link
+              href="/shop"
+              aria-label="Search products"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[#c7d3dc]"
+            >
+              <Search className="h-[16px] w-[16px]" />
+            </Link>
+            <CustomerNavbarCart />
+            <PublicNavbarAuthActions />
+          </div>
+        </div>
+      </header>
 
       <div className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8">
         <div className="h-8 w-52 animate-pulse rounded bg-[#e4e7ec]" />

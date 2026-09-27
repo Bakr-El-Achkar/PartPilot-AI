@@ -1,0 +1,652 @@
+from datetime import (
+    datetime,
+    timezone,
+)
+
+from app.core.ai_config import (
+    ai_settings,
+)
+from app.repositories.ai_mechanic_repository import (
+    ai_mechanic_session_repository,
+)
+from app.repositories.vehicle_repository import (
+    vehicle_repository,
+)
+from app.schemas.ai_mechanic import (
+    AIMechanicContinueRequest,
+    AIMechanicMessage,
+    AIMechanicSessionPublic,
+    AIMechanicStartRequest,
+    AIMechanicTurn,
+)
+from app.services.ollama_ai_mechanic_engine import (
+    OllamaAIMechanicEngine,
+)
+
+
+# ============================================================
+# DOMAIN ERRORS
+# ============================================================
+
+class AIMechanicVehicleNotFoundError(
+    Exception
+):
+    pass
+
+
+class AIMechanicSessionNotFoundError(
+    Exception
+):
+    pass
+
+
+class AIMechanicSessionClosedError(
+    Exception
+):
+    pass
+
+
+# ============================================================
+# AI MECHANIC SERVICE
+# ============================================================
+
+class AIMechanicService:
+    def __init__(
+        self,
+        *,
+        session_repository,
+        vehicle_repository,
+        ai_engine,
+    ):
+        self.session_repository = (
+            session_repository
+        )
+
+        self.vehicle_repository = (
+            vehicle_repository
+        )
+
+        self.ai_engine = (
+            ai_engine
+        )
+
+    # ========================================================
+    # START SESSION
+    # ========================================================
+
+    def start_session(
+        self,
+        current_user: dict,
+        payload: AIMechanicStartRequest,
+    ) -> AIMechanicSessionPublic:
+        user_id = current_user[
+            "_id"
+        ]
+
+        # ----------------------------------------------------
+        # Vehicle documents currently store user_id as string.
+        #
+        # Keep the original ObjectId for AI Mechanic session
+        # ownership, but use this string value when querying
+        # My Garage.
+        # ----------------------------------------------------
+
+        vehicle_user_id = str(
+            user_id
+        )
+
+        # ----------------------------------------------------
+        # Verify selected Garage vehicle ownership
+        # ----------------------------------------------------
+
+        vehicle = (
+            self.vehicle_repository
+            .find_owned_by_id(
+                payload.vehicle_id,
+                vehicle_user_id,
+            )
+        )
+
+        if vehicle is None:
+            raise (
+                AIMechanicVehicleNotFoundError(
+                    "Vehicle not found."
+                )
+            )
+
+        now = datetime.now(
+            timezone.utc
+        )
+
+        # ----------------------------------------------------
+        # Initial user message
+        # ----------------------------------------------------
+
+        user_message = (
+            AIMechanicMessage(
+                role="user",
+                content=payload.message,
+                created_at=now,
+            )
+        )
+
+        messages = [
+            user_message.model_dump(
+                mode="python"
+            )
+        ]
+
+        # ----------------------------------------------------
+        # Create persistent session first
+        #
+        # IMPORTANT:
+        # AI Mechanic sessions keep the authenticated user's
+        # original MongoDB ObjectId.
+        # ----------------------------------------------------
+
+        session_document = {
+            "user_id": user_id,
+            "vehicle_id": vehicle[
+                "_id"
+            ],
+            "status": (
+                "waiting_for_user"
+            ),
+            "messages": messages,
+            "latest_turn": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        session = (
+            self.session_repository
+            .create(
+                session_document
+            )
+        )
+
+        # ----------------------------------------------------
+        # Ask AI engine to analyze conversation
+        # ----------------------------------------------------
+
+        turn = self._analyze(
+            vehicle=vehicle,
+            messages=messages,
+        )
+
+        # ----------------------------------------------------
+        # Store assistant response as conversation message
+        # ----------------------------------------------------
+
+        assistant_message = (
+            AIMechanicMessage(
+                role="assistant",
+                content=(
+                    turn.assistant_message
+                ),
+                created_at=datetime.now(
+                    timezone.utc
+                ),
+            )
+        )
+
+        messages.append(
+            assistant_message.model_dump(
+                mode="python"
+            )
+        )
+
+        status = (
+            self._status_for_turn(
+                turn
+            )
+        )
+
+        updated_at = datetime.now(
+            timezone.utc
+        )
+
+        turn_document = (
+            turn.model_dump(
+                mode="python"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Persist AI result
+        # ----------------------------------------------------
+
+        updated = (
+            self.session_repository
+            .update_turn(
+                session_id=str(
+                    session["_id"]
+                ),
+                user_id=user_id,
+                messages=messages,
+                latest_turn=(
+                    turn_document
+                ),
+                status=status,
+                updated_at=updated_at,
+            )
+        )
+
+        if not updated:
+            raise (
+                AIMechanicSessionNotFoundError(
+                    "AI Mechanic session "
+                    "could not be updated."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Keep local document synchronized.
+        #
+        # MongoDB update_one() does not mutate the dict
+        # already stored in this method.
+        # ----------------------------------------------------
+
+        session[
+            "messages"
+        ] = messages
+
+        session[
+            "latest_turn"
+        ] = turn_document
+
+        session[
+            "status"
+        ] = status
+
+        session[
+            "updated_at"
+        ] = updated_at
+
+        # ----------------------------------------------------
+        # Return completed public session
+        # ----------------------------------------------------
+
+        return self._to_public(
+            session
+        )
+
+    # ========================================================
+    # CONTINUE SESSION
+    # ========================================================
+
+    def continue_session(
+        self,
+        current_user: dict,
+        session_id: str,
+        payload: AIMechanicContinueRequest,
+    ) -> AIMechanicSessionPublic:
+        user_id = current_user[
+            "_id"
+        ]
+
+        # ----------------------------------------------------
+        # Vehicle documents use string user_id.
+        #
+        # AI Mechanic sessions continue to use the original
+        # MongoDB ObjectId for ownership checks.
+        # ----------------------------------------------------
+
+        vehicle_user_id = str(
+            user_id
+        )
+
+        # ----------------------------------------------------
+        # Session must belong to current user
+        # ----------------------------------------------------
+
+        session = (
+            self.session_repository
+            .find_owned_by_id(
+                session_id,
+                user_id,
+            )
+        )
+
+        if session is None:
+            raise (
+                AIMechanicSessionNotFoundError(
+                    "AI Mechanic session "
+                    "not found."
+                )
+            )
+
+        if (
+            session.get(
+                "status"
+            )
+            == "closed"
+        ):
+            raise (
+                AIMechanicSessionClosedError(
+                    "AI Mechanic session "
+                    "is closed."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Re-check Garage vehicle ownership.
+        #
+        # We never trust vehicle information supplied
+        # by the browser on later turns.
+        # ----------------------------------------------------
+
+        vehicle = (
+            self.vehicle_repository
+            .find_owned_by_id(
+                str(
+                    session[
+                        "vehicle_id"
+                    ]
+                ),
+                vehicle_user_id,
+            )
+        )
+
+        if vehicle is None:
+            raise (
+                AIMechanicVehicleNotFoundError(
+                    "Vehicle not found."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Existing conversation
+        # ----------------------------------------------------
+
+        messages = list(
+            session.get(
+                "messages",
+                [],
+            )
+        )
+
+        # ----------------------------------------------------
+        # Append user's follow-up answer
+        # ----------------------------------------------------
+
+        user_message = (
+            AIMechanicMessage(
+                role="user",
+                content=payload.message,
+                created_at=datetime.now(
+                    timezone.utc
+                ),
+            )
+        )
+
+        messages.append(
+            user_message.model_dump(
+                mode="python"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Ask AI again using full conversation
+        # ----------------------------------------------------
+
+        turn = self._analyze(
+            vehicle=vehicle,
+            messages=messages,
+        )
+
+        # ----------------------------------------------------
+        # Append new assistant response
+        # ----------------------------------------------------
+
+        assistant_message = (
+            AIMechanicMessage(
+                role="assistant",
+                content=(
+                    turn.assistant_message
+                ),
+                created_at=datetime.now(
+                    timezone.utc
+                ),
+            )
+        )
+
+        messages.append(
+            assistant_message.model_dump(
+                mode="python"
+            )
+        )
+
+        status = (
+            self._status_for_turn(
+                turn
+            )
+        )
+
+        updated_at = datetime.now(
+            timezone.utc
+        )
+
+        turn_document = (
+            turn.model_dump(
+                mode="python"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Persist latest conversation state
+        # ----------------------------------------------------
+
+        updated = (
+            self.session_repository
+            .update_turn(
+                session_id=session_id,
+                user_id=user_id,
+                messages=messages,
+                latest_turn=(
+                    turn_document
+                ),
+                status=status,
+                updated_at=updated_at,
+            )
+        )
+
+        if not updated:
+            raise (
+                AIMechanicSessionNotFoundError(
+                    "AI Mechanic session "
+                    "could not be updated."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Keep local session document synchronized
+        # ----------------------------------------------------
+
+        session[
+            "messages"
+        ] = messages
+
+        session[
+            "latest_turn"
+        ] = turn_document
+
+        session[
+            "status"
+        ] = status
+
+        session[
+            "updated_at"
+        ] = updated_at
+
+        return self._to_public(
+            session
+        )
+
+    # ========================================================
+    # GET SESSION
+    # ========================================================
+
+    def get_session(
+        self,
+        current_user: dict,
+        session_id: str,
+    ) -> AIMechanicSessionPublic:
+        user_id = current_user[
+            "_id"
+        ]
+
+        session = (
+            self.session_repository
+            .find_owned_by_id(
+                session_id,
+                user_id,
+            )
+        )
+
+        if session is None:
+            raise (
+                AIMechanicSessionNotFoundError(
+                    "AI Mechanic session "
+                    "not found."
+                )
+            )
+
+        return self._to_public(
+            session
+        )
+
+    # ========================================================
+    # AI ANALYSIS
+    # ========================================================
+
+    def _analyze(
+        self,
+        *,
+        vehicle: dict,
+        messages: list[dict],
+    ) -> AIMechanicTurn:
+        result = (
+            self.ai_engine.analyze(
+                vehicle=vehicle,
+                messages=messages,
+            )
+        )
+
+        # ----------------------------------------------------
+        # Fake engines in tests already return AIMechanicTurn.
+        #
+        # A provider adapter may instead return a dictionary.
+        # Everything leaving this method must satisfy our
+        # strict Pydantic schema.
+        # ----------------------------------------------------
+
+        if isinstance(
+            result,
+            AIMechanicTurn,
+        ):
+            return result
+
+        return (
+            AIMechanicTurn
+            .model_validate(
+                result
+            )
+        )
+
+    # ========================================================
+    # SESSION STATUS
+    # ========================================================
+
+    @staticmethod
+    def _status_for_turn(
+        turn: AIMechanicTurn,
+    ) -> str:
+        if (
+            turn.response_type
+            == "follow_up"
+        ):
+            return (
+                "waiting_for_user"
+            )
+
+        return (
+            "analysis_ready"
+        )
+
+    # ========================================================
+    # SERIALIZATION
+    # ========================================================
+
+    @staticmethod
+    def _to_public(
+        session: dict,
+    ) -> AIMechanicSessionPublic:
+        latest_turn = (
+            session.get(
+                "latest_turn"
+            )
+        )
+
+        return (
+            AIMechanicSessionPublic(
+                id=str(
+                    session[
+                        "_id"
+                    ]
+                ),
+                vehicle_id=str(
+                    session[
+                        "vehicle_id"
+                    ]
+                ),
+                status=session[
+                    "status"
+                ],
+                messages=session.get(
+                    "messages",
+                    [],
+                ),
+                latest_turn=(
+                    latest_turn
+                ),
+                created_at=session[
+                    "created_at"
+                ],
+                updated_at=session[
+                    "updated_at"
+                ],
+            )
+        )
+
+
+# ============================================================
+# PRODUCTION INSTANCE
+# ============================================================
+
+ai_mechanic_service = (
+    AIMechanicService(
+        session_repository=(
+            ai_mechanic_session_repository
+        ),
+        vehicle_repository=(
+            vehicle_repository
+        ),
+        ai_engine=(
+            OllamaAIMechanicEngine(
+                host=(
+                    ai_settings
+                    .ollama_host
+                ),
+                model=(
+                    ai_settings
+                    .ollama_model
+                ),
+                timeout_seconds=(
+                    ai_settings
+                    .ollama_timeout_seconds
+                ),
+            )
+        ),
+    )
+)

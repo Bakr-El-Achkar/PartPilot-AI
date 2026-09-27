@@ -35,9 +35,20 @@ import type {
   RelevanceLevel,
 } from "@/lib/aiMechanic";
 
+import type {
+  Vehicle,
+} from "@/lib/vehicles";
 
-const MODEL_URL =
-  "/models/vehnexa-car.glb";
+import {
+  getVehicleVisualProfile,
+} from "@/lib/vehicle-visuals/vehicleVisualProfile";
+
+import {
+  getExteriorCameraDistance,
+} from "@/lib/vehicle-visuals/stageFraming";
+
+
+
 
 
 const COMPONENT_NODE_MAP:
@@ -107,6 +118,9 @@ const HOTSPOT_YAW:
 
 
 type DiagnosticVehicleStageProps = {
+  vehicle:
+    Vehicle | null;
+
   hotspotKey:
     string | null;
 
@@ -383,15 +397,26 @@ type MutableNumberRef = {
 };
 
 
+type CameraFocusMode =
+  | "default"
+  | "front-end"
+  | "brake"
+  | "engine";
+
+
 function CameraRig({
   target,
   focusRef,
+  focusMode,
 }: {
   target:
     THREE.Object3D | null;
 
   focusRef:
     MutableNumberRef;
+
+  focusMode:
+    CameraFocusMode;
 }) {
   const {
     camera,
@@ -452,6 +477,81 @@ function CameraRig({
     );
 
 
+  /*
+   * Component-specific inspection camera.
+   *
+   * Front-end steering/suspension needs
+   * the closest view because the target
+   * sits behind the wheel/brake assembly.
+   */
+  const focusOffset =
+    useMemo(
+      () => {
+        if (
+          focusMode ===
+          "front-end"
+        ) {
+          return new THREE.Vector3(
+            2.15,
+            1.0,
+            2.35,
+          );
+        }
+
+
+        if (
+          focusMode ===
+          "brake"
+        ) {
+          return new THREE.Vector3(
+            2.4,
+            1.15,
+            2.65,
+          );
+        }
+
+
+        if (
+          focusMode ===
+          "engine"
+        ) {
+          return new THREE.Vector3(
+            3.2,
+            2.0,
+            3.4,
+          );
+        }
+
+
+        return new THREE.Vector3(
+          4.05,
+          2.0,
+          4.55,
+        );
+      },
+      [
+        focusMode,
+      ],
+    );
+
+
+  const focusLookOffset =
+    useMemo(
+      () =>
+        focusMode ===
+        "front-end"
+          ? new THREE.Vector3(
+              0,
+              -0.08,
+              0,
+            )
+          : new THREE.Vector3(),
+      [
+        focusMode,
+      ],
+    );
+
+
   /* eslint-disable react-hooks/immutability */
   useFrame(
     (
@@ -486,11 +586,7 @@ function CameraRig({
           targetWorld,
         )
         .add(
-          new THREE.Vector3(
-            4.05,
-            2.0,
-            4.55,
-          ),
+          focusOffset,
         );
 
 
@@ -514,6 +610,16 @@ function CameraRig({
           targetWorld,
           focus,
         );
+
+
+      if (
+        focus > 0
+      ) {
+        desiredLook.addScaledVector(
+          focusLookOffset,
+          focus,
+        );
+      }
 
 
       camera.position.lerp(
@@ -748,12 +854,163 @@ function DiagnosticMarker({
 }
 
 
+function ExteriorVehicleModel({
+  modelUrl,
+}: {
+  modelUrl:
+    string;
+}) {
+  const {
+    scene,
+  } = useGLTF(
+    modelUrl,
+  );
+
+  const { camera, size } = useThree();
+
+
+  const model =
+    useMemo(
+      () =>
+        scene.clone(
+          true,
+        ),
+      [
+        scene,
+      ],
+    );
+
+
+  const {
+    scale,
+    center,
+    radius,
+  } =
+    useMemo(() => {
+      const box =
+        new THREE.Box3().setFromObject(
+          model,
+        );
+
+      const size =
+        new THREE.Vector3();
+
+      const modelCenter =
+        new THREE.Vector3();
+
+      box.getSize(
+        size,
+      );
+
+      box.getCenter(
+        modelCenter,
+      );
+
+
+      const maxDimension =
+        Math.max(
+          size.x,
+          size.y,
+          size.z,
+        );
+
+
+      return {
+        scale:
+          maxDimension > 0
+            ? 7.6 /
+              maxDimension
+            : 1,
+
+        center:
+          modelCenter,
+
+        radius:
+          box.getBoundingSphere(new THREE.Sphere()).radius,
+      };
+    }, [
+      model,
+    ]);
+
+
+  const root =
+    useRef<THREE.Group>(
+      null,
+    );
+
+  const cameraPosition = useMemo(() => {
+    const distance = getExteriorCameraDistance(
+      radius * scale,
+      size.width / Math.max(size.height, 1),
+      camera instanceof THREE.PerspectiveCamera ? camera.fov : 32,
+    );
+    return new THREE.Vector3(6, 2.8, 7).normalize().multiplyScalar(distance)
+      .add(new THREE.Vector3(0, -0.45, 0));
+  }, [camera, radius, scale, size.height, size.width]);
+
+  useEffect(() => {
+    camera.position.copy(cameraPosition);
+    camera.lookAt(0, -0.45, 0);
+  }, [camera, cameraPosition]);
+
+
+  useFrame(
+    (
+      _state,
+      delta,
+    ) => {
+      if (
+        root.current
+      ) {
+        root.current.rotation.y +=
+          delta *
+          0.16;
+      }
+
+      camera.position.lerp(cameraPosition, 1 - Math.exp(-3 * delta));
+      camera.lookAt(0, -0.45, 0);
+    },
+  );
+
+
+  return (
+    <group
+      ref={
+        root
+      }
+      scale={
+        scale
+      }
+      position={[
+        0,
+        -0.45,
+        0,
+      ]}
+    >
+      <primitive
+        object={
+          model
+        }
+        position={[
+          -center.x,
+          -center.y,
+          -center.z,
+        ]}
+      />
+    </group>
+  );
+}
+
 function VehicleModel({
+  modelUrl,
   hotspotKey,
   componentKey,
   componentLabel,
   analyzing,
 }: {
+  modelUrl:
+    string;
+
   hotspotKey:
     string | null;
 
@@ -796,7 +1053,7 @@ function VehicleModel({
   const {
     scene,
   } = useGLTF(
-    MODEL_URL,
+    modelUrl,
     true,
     true,
     (loader) => {
@@ -964,6 +1221,37 @@ function VehicleModel({
       [
         model,
         targetName,
+      ],
+    );
+
+
+  /*
+   * Steering/suspension targets are represented
+   * by the Axles mesh, but the inspection camera
+   * should physically approach the front-left
+   * wheel assembly instead of the vehicle center.
+   */
+  const cameraTargetObject =
+    useMemo(
+      () => {
+        if (
+          isFrontEndComponent
+        ) {
+          return (
+            model.getObjectByName(
+              "WheelFrontL",
+            ) ??
+            targetObject
+          );
+        }
+
+
+        return targetObject;
+      },
+      [
+        isFrontEndComponent,
+        model,
+        targetObject,
       ],
     );
 
@@ -1983,7 +2271,7 @@ function VehicleModel({
         isEngineBayFocus
           ? 0.88
           : isFrontEndFocus
-            ? 0.76
+            ? 0.34
             : 0.58;
 
 
@@ -2049,9 +2337,16 @@ function VehicleModel({
         const part
         of wheelShellPartsRef.current
       ) {
+        const shellAmount =
+          isFrontEndFocus
+            ? part.amount *
+              1.45
+            : part.amount;
+
+
         const targetX =
           part.original.x +
-          part.amount *
+          shellAmount *
             wheelProgress;
 
 
@@ -2108,7 +2403,7 @@ function VehicleModel({
            * clear the pad after the wheel is out.
            */
           amount =
-            0.15 *
+            0.24 *
             smoothRange(
               time,
               3.55,
@@ -2238,7 +2533,7 @@ function VehicleModel({
             ? 0.065 *
               isolateProgress
             : isFrontEndFocus
-              ? 0.13 *
+              ? 0.20 *
                 smoothRange(
                   time,
                   4.25,
@@ -2441,10 +2736,19 @@ function VehicleModel({
     <>
       <CameraRig
         target={
-          targetObject
+          cameraTargetObject
         }
         focusRef={
           cameraFocusRef
+        }
+        focusMode={
+          isFrontEndFocus
+            ? "front-end"
+            : isBrakeFocus
+              ? "brake"
+              : isEngineBayFocus
+                ? "engine"
+                : "default"
         }
       />
 
@@ -2728,6 +3032,7 @@ function diagnosticSequenceFor(
 
 
 export default function DiagnosticVehicleStage({
+  vehicle,
   hotspotKey,
   componentKey,
   componentLabel,
@@ -2736,6 +3041,16 @@ export default function DiagnosticVehicleStage({
   diagnosticStep,
   diagnosticLabel,
 }: DiagnosticVehicleStageProps) {
+
+  const visualProfile =
+    getVehicleVisualProfile(
+      vehicle,
+    );
+
+  const showExteriorModel =
+    !analyzing &&
+    !componentKey &&
+    visualProfile.visualModelUrl !== visualProfile.diagnosticModelUrl;
 
   const [
     diagnosticDomState,
@@ -2857,36 +3172,113 @@ export default function DiagnosticVehicleStage({
         }}
       />
 
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-[18%] left-1/2 h-[19%] w-[72%] -translate-x-1/2 rounded-[50%] border border-[#456b85]/30 bg-[#315f81]/[0.08] shadow-[0_0_55px_rgba(63,143,191,0.12)]"
+      />
+
 
       <div className="absolute left-5 top-5 z-30 rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2 backdrop-blur-sm">
         <p className="text-[7px] font-bold uppercase tracking-[0.16em] text-[#71889c]">
-          3D diagnostic map
+          {showExteriorModel ? "3D vehicle preview" : "3D diagnostic map"}
         </p>
 
         <p className="mt-1 text-[9px] text-[#becbd6]">
-          Automated component isolation
+          {showExteriorModel ? "Rotating vehicle exterior" : "Automated component isolation"}
         </p>
       </div>
 
 
-      <div className="absolute right-5 top-5 z-30 rounded-full border border-white/[0.08] bg-black/20 px-3 py-1.5 backdrop-blur-sm">
+      <div className="absolute right-5 top-5 z-30 hidden rounded-full border border-white/[0.08] bg-black/20 px-3 py-1.5 backdrop-blur-sm sm:block">
         <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7890a4]">
-          Diagnostic surrogate
+          {showExteriorModel ? "Exterior view" : "Diagnostic view"}
         </p>
       </div>
 
 
-      <div className="relative h-full w-full">
-        <Canvas
+      <div className="absolute inset-0">
+        {analyzing && (
+  <div
+    className="pointer-events-none absolute inset-0 z-30 overflow-hidden"
+    style={{
+      animation:
+        "vehnexaDiagnosticHandoff 850ms cubic-bezier(0.22, 1, 0.36, 1) forwards",
+    }}
+  >
+    <div className="absolute inset-0 bg-[#061827]/70 backdrop-blur-[2px]" />
+
+    <div
+      className="absolute inset-y-0 -left-1/3 w-1/2 rotate-[10deg] bg-gradient-to-r from-transparent via-[#e31b2d]/80 to-transparent"
+      style={{
+        animation:
+          "vehnexaDiagnosticSweep 850ms cubic-bezier(0.22, 1, 0.36, 1) forwards",
+      }}
+    />
+
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-[1px] w-24 bg-gradient-to-r from-transparent via-[#ff394a] to-transparent" />
+
+        <div className="text-[10px] font-semibold uppercase tracking-[0.38em] text-white/90">
+          Entering diagnostic view
+        </div>
+
+        <div className="h-[1px] w-24 bg-gradient-to-r from-transparent via-[#ff394a] to-transparent" />
+      </div>
+    </div>
+  </div>
+)}
+
+<style jsx>{`
+  @keyframes vehnexaDiagnosticHandoff {
+    0% {
+      opacity: 0;
+    }
+
+    18% {
+      opacity: 1;
+    }
+
+    62% {
+      opacity: 1;
+    }
+
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes vehnexaDiagnosticSweep {
+    0% {
+      transform:
+        translateX(-130%)
+        rotate(10deg);
+      opacity: 0;
+    }
+
+    25% {
+      opacity: 1;
+    }
+
+    100% {
+      transform:
+        translateX(330%)
+        rotate(10deg);
+      opacity: 0;
+    }
+  }
+`}</style>
+<Canvas
+        className="h-full w-full"
         dpr={[
           1,
           1.75,
         ]}
         camera={{
           position: [
-            6,
-            2.8,
-            7,
+            12,
+            5.6,
+            14,
           ],
 
           fov: 32,
@@ -2955,20 +3347,31 @@ export default function DiagnosticVehicleStage({
             null
           }
         >
-          <VehicleModel
-            hotspotKey={
-              hotspotKey
-            }
-            componentKey={
-              componentKey
-            }
-            componentLabel={
-              componentLabel
-            }
-            analyzing={
-              analyzing
-            }
-          />
+          {showExteriorModel ? (
+            <ExteriorVehicleModel
+              modelUrl={
+                visualProfile.visualModelUrl
+              }
+            />
+          ) : (
+            <VehicleModel
+              modelUrl={
+                visualProfile.diagnosticModelUrl
+              }
+              hotspotKey={
+                hotspotKey
+              }
+              componentKey={
+                componentKey
+              }
+              componentLabel={
+                componentLabel
+              }
+              analyzing={
+                analyzing
+              }
+            />
+          )}
         </Suspense>
 
 
@@ -3160,5 +3563,4 @@ export default function DiagnosticVehicleStage({
     </div>
   );
 }
-
 

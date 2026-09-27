@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { CustomerNavbarBrand, CustomerNavbarLinks, CustomerNavbarCart } from "@/components/customer/CustomerNavbarParts";
+
 import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
 import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
 
@@ -810,52 +812,11 @@ export default function SavedAddressesPage() {
       ======================================================== */}
 
       <header className="sticky top-0 z-50 border-b border-white/[0.07] bg-[#061827]/95 text-white shadow-[0_8px_40px_rgba(2,12,22,0.18)] backdrop-blur-xl">
-        <div className="mx-auto flex h-[76px] max-w-[1480px] items-center px-4 sm:px-6 lg:px-8">
-          <Link
-            href="/"
-            className="group flex items-center gap-3"
-          >
-            <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-[#e31b2d] font-black italic text-white shadow-[0_0_30px_rgba(227,27,45,0.28)]">
-              <span className="relative z-10">
-                V
-              </span>
-
-              <div className="absolute inset-0 translate-x-[-120%] bg-gradient-to-r from-transparent via-white/25 to-transparent transition duration-700 group-hover:translate-x-[120%]" />
-            </div>
-
-            <div>
-              <div className="text-[15px] font-black tracking-[-0.02em]">
-                Vehnexa
-              </div>
-
-              <div className="text-[7px] font-semibold uppercase tracking-[0.28em] text-[#8ba0b4]">
-                Drive smarter
-              </div>
-            </div>
-          </Link>
+        <div className="mx-auto flex h-[66px] max-w-[1480px] items-center px-4 sm:px-6 lg:px-8">
+          <CustomerNavbarBrand />
 
 
-          <nav className="ml-12 hidden items-center gap-8 xl:flex">
-            <NavbarLink
-              href="/shop"
-              label="Shop"
-            />
-
-            <NavbarLink
-              href="/account/garage"
-              label="My Garage"
-            />
-
-            <NavbarLink
-              href="/ai-mechanic"
-              label="AI Mechanic"
-            />
-
-            <NavbarLink
-              href="/orders"
-              label="Orders"
-            />
-          </nav>
+          <CustomerNavbarLinks />
 
 
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
@@ -868,21 +829,7 @@ export default function SavedAddressesPage() {
             </Link>
 
 
-            <Link
-              href="/cart"
-              aria-label={`Cart with ${cartCount} items`}
-              className="relative flex h-10 w-10 items-center justify-center rounded-full text-[#c4ced7] transition hover:bg-white/[0.06] hover:text-white"
-            >
-              <ShoppingBag className="h-[17px] w-[17px]" />
-
-              {cartCount > 0 && (
-                <span className="absolute right-[1px] top-[1px] flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[8px] font-black leading-none text-white ring-2 ring-[#061827]">
-                  {cartCount > 99
-                    ? "99+"
-                    : cartCount}
-                </span>
-              )}
-            </Link>
+            <CustomerNavbarCart count={cartCount} />
 
 
             <NavbarNotificationBell />
@@ -1333,7 +1280,7 @@ export default function SavedAddressesPage() {
                 />
 
                 <ProfileLink
-                  href="/notifications"
+                  href="/account/notifications"
                   icon={
                     Bell
                   }
@@ -2316,24 +2263,6 @@ function AddressInput({
    NAVBAR LINK
 ============================================================ */
 
-function NavbarLink({
-  href,
-  label,
-}: {
-  href: string;
-  label: string;
-}) {
-  return (
-    <Link
-      href={
-        href
-      }
-      className="relative py-2 text-[10px] font-bold text-[#b5c2cd] transition hover:text-white"
-    >
-      {label}
-    </Link>
-  );
-}
 
 
 /* ============================================================

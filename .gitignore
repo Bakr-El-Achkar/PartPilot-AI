@@ -12,3 +12,33 @@ backend/.env
 # General
 .env
 .DS_Store
+# Vercel local metadata
+frontend/.vercel/
+backend/.vercel/
+
+# Logs
+*.log
+
+# Local backup files
+*.bak
+
+# Temporary deployment / audit context files
+VEHNEXA_DEPLOY_CHECK.txt
+AUDIT_REPORT.md
+Vehnexa_Auth_Current_Code.txt
+vehnexa-checkout-context.txt
+vehnexa-orders-context.txt
+
+frontend/DiagnosticVehicleStage-current.txt
+
+backend/Vehnexa_Garage_Current_Code.txt
+backend/admin-ai-sessions-audit.txt
+backend/admin-notifications-audit.txt
+backend/admin-orders-current.txt
+backend/admin-reviews-audit.txt
+backend/product_shop_context.txt
+
+# Environment files - never commit secrets
+**/.env
+**/.env.*
+!**/.env.example

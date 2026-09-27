@@ -13,7 +13,11 @@ export function getAccessToken(): string | null {
     return null;
   }
 
-  return localStorage.getItem(TOKEN_KEY);
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
 export function removeAccessToken() {
@@ -21,7 +25,11 @@ export function removeAccessToken() {
     return;
   }
 
-  localStorage.removeItem(TOKEN_KEY);
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // A blocked storage API must not prevent sign-out navigation.
+  }
 }
 
 export function isAuthenticated(): boolean {

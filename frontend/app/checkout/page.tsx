@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { CustomerNavbarBrand, CustomerNavbarLinks, CustomerNavbarCart } from "@/components/customer/CustomerNavbarParts";
+
 import CustomerLogoutButton from "@/components/customer/CustomerLogoutButton";
 import NavbarNotificationBell from "@/components/notifications/NavbarNotificationBell";
 
@@ -34,7 +36,6 @@ import {
   Plus,
   Search,
   ShieldCheck,
-  ShoppingBag,
   ShoppingCart,
   Trash2,
   UserRound,
@@ -51,7 +52,13 @@ import {
 
 import {
   createOrder,
+  type CreateOrderPayload,
 } from "@/lib/orders";
+
+import {
+  clearOrderAttemptKey,
+  getOrderAttemptKey,
+} from "@/lib/order-attempt";
 
 import {
   getVehicles,
@@ -731,10 +738,7 @@ export default function CheckoutPage() {
       );
 
 
-      const order =
-        await createOrder(
-          token,
-          {
+      const payload: CreateOrderPayload = {
             items:
               items.map(
                 (
@@ -757,8 +761,12 @@ export default function CheckoutPage() {
             vehicle_id:
               activeVehicle?.id ??
               null,
-          },
-        );
+      };
+
+      const idempotencyKey = await getOrderAttemptKey(payload);
+      const order = await createOrder(token, payload, idempotencyKey);
+
+      clearOrderAttemptKey();
 
 
       clearCart();
@@ -772,10 +780,14 @@ export default function CheckoutPage() {
       );
 
 
-      window.sessionStorage.setItem(
-        "vehnexa_order_placed",
-        order.order_number,
-      );
+      try {
+        window.sessionStorage.setItem(
+          "vehnexa_order_placed",
+          order.order_number,
+        );
+      } catch {
+        // This optional confirmation hint must not turn a placed order into an error.
+      }
 
 
       router.push(
@@ -825,48 +837,11 @@ export default function CheckoutPage() {
       ====================================================== */}
 
       <header className="sticky top-0 z-50 border-b border-white/[0.07] bg-[#061827]/95 text-white backdrop-blur-xl">
-        <div className="mx-auto flex h-[76px] max-w-[1480px] items-center gap-6 px-4 sm:px-6 lg:px-8">
-          <Link
-            href="/"
-            className="flex shrink-0 items-center gap-3"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e31b2d] text-[16px] font-black italic">
-              V
-            </div>
-
-            <div>
-              <div className="text-[15px] font-black tracking-[-0.02em]">
-                Vehnexa
-              </div>
-
-              <div className="text-[7px] font-bold uppercase tracking-[0.26em] text-[#8da1b2]">
-                Secure checkout
-              </div>
-            </div>
-          </Link>
+        <div className="mx-auto flex h-[66px] max-w-[1480px] items-center gap-6 px-4 sm:px-6 lg:px-8">
+          <CustomerNavbarBrand />
 
 
-          <nav className="hidden items-center gap-7 xl:flex">
-            <TopLink
-              href="/shop"
-              label="Shop"
-            />
-
-            <TopLink
-              href="/account/garage"
-              label="My Garage"
-            />
-
-            <TopLink
-              href="/ai-mechanic"
-              label="AI Mechanic"
-            />
-
-            <TopLink
-              href="/orders"
-              label="Orders"
-            />
-          </nav>
+          <CustomerNavbarLinks />
 
 
           <form
@@ -895,23 +870,7 @@ export default function CheckoutPage() {
 
 
           <div className="flex items-center gap-1">
-            <Link
-              href="/cart"
-              aria-label="Cart"
-              className="relative flex h-10 w-10 items-center justify-center rounded-full text-[#d0d9e1] transition hover:bg-white/[0.06] hover:text-white"
-            >
-              <ShoppingBag className="h-[17px] w-[17px]" />
-
-              {cartCount >
-                0 && (
-                <span className="absolute right-0 top-0 flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-[#e31b2d] px-1 text-[7px] font-black text-white ring-2 ring-[#061827]">
-                  {cartCount >
-                  99
-                    ? "99+"
-                    : cartCount}
-                </span>
-              )}
-            </Link>
+            <CustomerNavbarCart count={cartCount} />
 
 
             <NavbarNotificationBell />
@@ -1744,24 +1703,6 @@ function formatMoney(
 }
 
 
-function TopLink({
-  href,
-  label,
-}: {
-  href: string;
-  label: string;
-}) {
-  return (
-    <Link
-      href={
-        href
-      }
-      className="text-[9px] font-bold text-[#b6c3ce] transition hover:text-white"
-    >
-      {label}
-    </Link>
-  );
-}
 
 
 function HeroMetric({

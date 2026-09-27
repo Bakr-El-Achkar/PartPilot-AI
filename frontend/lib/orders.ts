@@ -132,6 +132,7 @@ function getErrorMessage(
 export async function createOrder(
   token: string,
   payload: CreateOrderPayload,
+  idempotencyKey: string,
 ): Promise<Order> {
   const response =
     await fetch(
@@ -139,10 +140,10 @@ export async function createOrder(
       {
         method: "POST",
 
-        headers:
-          authHeaders(
-            token,
-          ),
+        headers: {
+          ...authHeaders(token),
+          "Idempotency-Key": idempotencyKey,
+        },
 
         body:
           JSON.stringify(

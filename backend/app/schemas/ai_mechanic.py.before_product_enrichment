@@ -1,0 +1,453 @@
+from datetime import datetime
+from typing import Literal
+
+from pydantic import (
+    BaseModel,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+
+# ============================================================
+# SHARED TYPES
+# ============================================================
+
+RelevanceLevel = Literal[
+    "high",
+    "medium",
+    "low",
+]
+
+SafetyLevel = Literal[
+    "normal",
+    "caution",
+    "urgent",
+]
+
+ResponseType = Literal[
+    "follow_up",
+    "analysis",
+]
+
+MessageRole = Literal[
+    "user",
+    "assistant",
+]
+
+SessionStatus = Literal[
+    "waiting_for_user",
+    "analysis_ready",
+    "closed",
+]
+
+
+# ============================================================
+# SAFETY
+# ============================================================
+
+class AISafety(BaseModel):
+    level: SafetyLevel
+
+    message: str = Field(
+        min_length=1,
+        max_length=500,
+    )
+
+    @field_validator(
+        "message",
+    )
+    @classmethod
+    def clean_message(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Safety message cannot be blank."
+            )
+
+        return value
+
+
+# ============================================================
+# POSSIBLE CAUSE
+# ============================================================
+
+class AIPossibleCause(BaseModel):
+    cause: str = Field(
+        min_length=1,
+        max_length=160,
+    )
+
+    explanation: str = Field(
+        min_length=1,
+        max_length=800,
+    )
+
+    relevance: RelevanceLevel
+
+    @field_validator(
+        "cause",
+        "explanation",
+    )
+    @classmethod
+    def clean_text(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Text cannot be blank."
+            )
+
+        return value
+
+
+# ============================================================
+# COMPONENT SUGGESTION
+# ============================================================
+
+class AIComponentSuggestion(BaseModel):
+    """
+    Structured AI component suggestion.
+
+    component_key:
+        Stable internal component identifier.
+
+    catalog_key:
+        Maps the AI suggestion to Vehnexa catalog data.
+
+    hotspot_key:
+        Semantic 3D location identifier.
+
+        The AI never generates arbitrary x/y/z positions.
+        The frontend maps this key to known coordinates
+        and camera targets on the 3D vehicle.
+    """
+
+    component_key: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+
+    label: str = Field(
+        min_length=1,
+        max_length=160,
+    )
+
+    catalog_key: str = Field(
+        min_length=1,
+        max_length=120,
+    )
+
+    hotspot_key: str = Field(
+        min_length=1,
+        max_length=120,
+    )
+
+    relevance: RelevanceLevel
+
+    explanation: str = Field(
+        min_length=1,
+        max_length=800,
+    )
+
+    @field_validator(
+        "component_key",
+        "label",
+        "catalog_key",
+        "hotspot_key",
+        "explanation",
+    )
+    @classmethod
+    def clean_component_text(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Component fields cannot be blank."
+            )
+
+        return value
+
+
+# ============================================================
+# AI TURN RESULT
+# ============================================================
+
+class AIMechanicTurn(BaseModel):
+    response_type: ResponseType
+
+    assistant_message: str = Field(
+        min_length=1,
+        max_length=2000,
+    )
+
+    follow_up_question: str | None = Field(
+        default=None,
+        max_length=500,
+    )
+
+    possible_causes: list[
+        AIPossibleCause
+    ] = Field(
+        default_factory=list,
+    )
+
+    components: list[
+        AIComponentSuggestion
+    ] = Field(
+        default_factory=list,
+    )
+
+    safety: AISafety
+
+    @field_validator(
+        "assistant_message",
+    )
+    @classmethod
+    def clean_assistant_message(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Assistant message cannot be blank."
+            )
+
+        return value
+
+    @field_validator(
+        "follow_up_question",
+    )
+    @classmethod
+    def clean_follow_up_question(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        value = value.strip()
+
+        if not value:
+            return None
+
+        return value
+
+    @model_validator(
+        mode="after",
+    )
+    def validate_turn(
+        self,
+    ):
+        # ----------------------------------------------------
+        # FOLLOW-UP RESPONSE
+        # ----------------------------------------------------
+
+        if (
+            self.response_type
+            == "follow_up"
+        ):
+            if (
+                self.follow_up_question
+                is None
+            ):
+                raise ValueError(
+                    "A follow-up response must include "
+                    "a follow-up question."
+                )
+
+            return self
+
+        # ----------------------------------------------------
+        # ANALYSIS RESPONSE
+        # ----------------------------------------------------
+
+        if (
+            self.follow_up_question
+            is not None
+        ):
+            raise ValueError(
+                "An analysis response must not include "
+                "a follow-up question."
+            )
+
+        if (
+            len(
+                self.possible_causes
+            )
+            == 0
+        ):
+            raise ValueError(
+                "An analysis response must include "
+                "at least one possible cause."
+            )
+
+        if (
+            len(
+                self.components
+            )
+            == 0
+        ):
+            raise ValueError(
+                "An analysis response must include "
+                "at least one component suggestion."
+            )
+
+        return self
+
+
+# ============================================================
+# START DIAGNOSIS REQUEST
+# ============================================================
+
+class AIMechanicStartRequest(BaseModel):
+    vehicle_id: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+
+    message: str = Field(
+        min_length=1,
+        max_length=2000,
+    )
+
+    @field_validator(
+        "vehicle_id",
+        "message",
+    )
+    @classmethod
+    def clean_required_text(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Field cannot be blank."
+            )
+
+        return value
+
+
+# ============================================================
+# CONTINUE DIAGNOSIS REQUEST
+# ============================================================
+
+class AIMechanicContinueRequest(
+    BaseModel
+):
+    message: str = Field(
+        min_length=1,
+        max_length=2000,
+    )
+
+    @field_validator(
+        "message",
+    )
+    @classmethod
+    def clean_message(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Message cannot be blank."
+            )
+
+        return value
+
+
+# ============================================================
+# CONVERSATION MESSAGE
+# ============================================================
+
+class AIMechanicMessage(
+    BaseModel
+):
+    role: MessageRole
+
+    content: str = Field(
+        min_length=1,
+        max_length=3000,
+    )
+
+    created_at: datetime
+
+    @field_validator(
+        "content",
+    )
+    @classmethod
+    def clean_content(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Message content cannot be blank."
+            )
+
+        return value
+
+
+# ============================================================
+# PUBLIC SESSION
+# ============================================================
+
+class AIMechanicSessionPublic(
+    BaseModel
+):
+    id: str
+
+    vehicle_id: str
+
+    status: SessionStatus
+
+    messages: list[
+        AIMechanicMessage
+    ] = Field(
+        default_factory=list,
+    )
+
+    latest_turn: (
+        AIMechanicTurn
+        | None
+    ) = None
+
+    created_at: datetime
+
+    updated_at: datetime
+
+    @field_validator(
+        "id",
+        "vehicle_id",
+    )
+    @classmethod
+    def clean_identifier(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Identifier cannot be blank."
+            )
+
+        return value

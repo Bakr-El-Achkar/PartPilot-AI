@@ -1,4 +1,6 @@
-"use client";
+﻿"use client";
+
+import { CustomerNavbarBrand, CustomerNavbarLinks, CustomerNavbarCart } from "@/components/customer/CustomerNavbarParts";
 
 import PublicNavbarAuthActions from "@/components/customer/PublicNavbarAuthActions";
 
@@ -40,7 +42,6 @@ import {
   ScanSearch,
   Search,
   ShieldCheck,
-  ShoppingCart,
   Sparkles,
   Wrench,
   Zap,
@@ -2023,52 +2024,11 @@ function HomeNavbar({
       }}
       className="sticky top-0 z-50 border-b border-white/[0.07] bg-[#061827]/95 shadow-[0_8px_30px_rgba(0,0,0,.08)] backdrop-blur-xl"
     >
-      <div className="mx-auto flex h-[66px] max-w-[1320px] items-center px-4 sm:px-6 lg:px-8">
-        <Link
-          href="/"
-          className="group flex shrink-0 items-center gap-2.5"
-          aria-label="Vehnexa home"
-        >
-          <motion.div
-            whileHover={{
-              rotate:
-                -4,
-
-              scale:
-                1.05,
-            }}
-          >
-            <VehnexaLogo />
-          </motion.div>
+      <div className="mx-auto flex h-[66px] max-w-[1480px] items-center px-4 sm:px-6 lg:px-8">
+        <CustomerNavbarBrand />
 
 
-          <span className="text-[13px] font-extrabold tracking-[-0.025em] text-white">
-            Vehnexa
-          </span>
-        </Link>
-
-
-        <nav className="ml-10 hidden h-full items-center gap-8 lg:flex">
-          <TopNavLink
-            href="/shop"
-            label="Shop"
-          />
-
-          <TopNavLink
-            href="/account/garage"
-            label="My Garage"
-          />
-
-          <TopNavLink
-            href="/ai-mechanic"
-            label="AI Mechanic"
-          />
-
-          <TopNavLink
-            href="#resources"
-            label="Resources"
-          />
-        </nav>
+        <CustomerNavbarLinks />
 
 
         <div className="ml-auto flex items-center gap-1.5">
@@ -2084,34 +2044,7 @@ function HomeNavbar({
           </button>
 
 
-          <Link
-            href="/cart"
-            aria-label={`Cart with ${cartCount} items`}
-            className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#c8d3dc] transition hover:bg-white/[0.06] hover:text-white"
-          >
-            <ShoppingCart className="h-[15px] w-[15px]" />
-
-
-            {cartCount >
-              0 && (
-              <motion.span
-                initial={{
-                  scale:
-                    0,
-                }}
-                animate={{
-                  scale:
-                    1,
-                }}
-                className="absolute right-[1px] top-[0px] flex min-h-[15px] min-w-[15px] items-center justify-center rounded-full bg-[#e31b2d] px-[3px] text-[7px] font-extrabold leading-none text-white"
-              >
-                {cartCount >
-                99
-                  ? "99+"
-                  : cartCount}
-              </motion.span>
-            )}
-          </Link>
+          <CustomerNavbarCart count={cartCount} />
 
 
           <PublicNavbarAuthActions />
@@ -2126,31 +2059,6 @@ function HomeNavbar({
    NAV LINK
 ============================================================ */
 
-function TopNavLink({
-  href,
-  label,
-}: {
-  href:
-    string;
-
-  label:
-    string;
-}) {
-  return (
-    <Link
-      href={
-        href
-      }
-      className="group relative flex h-full items-center text-[9px] font-semibold text-[#bcc9d3] transition hover:text-white"
-    >
-      {
-        label
-      }
-
-      <span className="absolute bottom-0 left-1/2 h-[2px] w-0 -translate-x-1/2 bg-[#e31b2d] transition-all duration-300 group-hover:w-full" />
-    </Link>
-  );
-}
 
 
 /* ============================================================

@@ -343,9 +343,13 @@ export function clearCart(): void {
     return;
   }
 
-  window.localStorage.removeItem(
-    CART_STORAGE_KEY,
-  );
+  try {
+    window.localStorage.removeItem(
+      CART_STORAGE_KEY,
+    );
+  } catch {
+    // The checkout can still finish when storage is unavailable.
+  }
 
   window.dispatchEvent(
     new Event(
